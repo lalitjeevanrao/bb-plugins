@@ -1,0 +1,4 @@
+dist/
+node_modules/
+footer-placement-test.html
+.DS_Store

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://getbb.app/schemas/plugins.schema.json",
+  "schemaVersion": 1,
+  "name": "session-credits-monorepo",
+  "plugins": [
+    {
+      "name": "session-credits",
+      "source": "./packages/bb-plugin-session-credits"
+    }
+  ]
+}

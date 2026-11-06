@@ -1,0 +1,61 @@
+.session-credit-control {
+  display:inline-flex; align-items:center; gap:6px; min-height:28px; max-width:100%;
+  padding:4px 7px; border:0; border-radius:6px; background:transparent;
+  color:var(--muted-foreground); font:12px var(--font-sans,system-ui); cursor:pointer; flex-shrink:0;
+}
+.session-credit-control:hover { background:var(--accent); color:var(--foreground); }
+.session-credit-control:focus-visible,
+.session-credit-details button:focus-visible,
+.session-credit-details summary:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+.session-credit-control svg { flex-shrink:0; }
+.session-credit-control strong { font-weight:550; color:var(--foreground); font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.session-credit-control strong span { font-size:10px; font-weight:500; }
+.session-credit-details[data-tone="good"],.session-credit-dot[data-tone="good"] { --session-credit-tone:var(--success,var(--foreground)); }
+.session-credit-details[data-tone="info"],.session-credit-dot[data-tone="info"] { --session-credit-tone:var(--primary); }
+.session-credit-details[data-tone="warn"],.session-credit-dot[data-tone="warn"] { --session-credit-tone:var(--warning-text,var(--foreground)); }
+.session-credit-details[data-tone="bad"],.session-credit-dot[data-tone="bad"] { --session-credit-tone:var(--destructive-text,var(--destructive)); }
+.session-credit-details[data-tone="muted"],.session-credit-dot[data-tone="muted"] { --session-credit-tone:var(--muted-foreground); }
+.session-credit-dot { width:6px; height:6px; flex-shrink:0; border-radius:50%; background:var(--session-credit-tone,var(--muted-foreground)); }
+.session-credit-compact { display:flex; width:fit-content; max-width:100%; margin-left:auto; }
+.session-credit-details {
+  width:100%; max-width:100%; max-height:min(65vh,560px); overflow-y:auto; box-sizing:border-box;
+  padding:14px; color:var(--foreground); font:12px/1.55 var(--font-sans,system-ui); overflow-wrap:anywhere;
+}
+.session-credit-details header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.session-credit-details h3 { margin:0; font-size:14px; font-weight:600; }
+.session-credit-details button { display:inline-flex; align-items:center; justify-content:center; min-width:28px; min-height:28px; border:0; border-radius:5px; background:transparent; color:var(--muted-foreground); font-size:20px; cursor:pointer; }
+.session-credit-details button:hover { background:var(--accent); color:var(--foreground); }
+.session-credit-details p { margin:0 0 8px; }
+.session-credit-total { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
+.session-credit-total strong { font-size:20px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.session-credit-state {
+  font-size:11px; padding:1px 6px; border:1px solid color-mix(in srgb,var(--session-credit-tone) 35%,transparent);
+  border-radius:4px; color:var(--session-credit-tone);
+  background:color-mix(in srgb,var(--session-credit-tone) 10%,transparent);
+}
+.session-credit-source,.session-credit-scope,.session-credit-note { color:var(--muted-foreground); }
+.session-credit-note { font-size:11px; }
+.session-credit-callout { padding-inline-start:9px; border-inline-start:2px solid var(--session-credit-tone); margin-block:10px; }
+.session-credit-callout p:first-child { color:var(--session-credit-tone); }
+.session-credit-coverage { color:var(--warning-text,var(--muted-foreground)); font-size:11px; }
+.session-credit-debug { border-top:1px solid var(--border); margin-block:10px; padding-top:8px; }
+.session-credit-debug summary { cursor:pointer; color:var(--muted-foreground); margin-bottom:6px; }
+.session-credit-session { display:block; font-size:10px; overflow-wrap:anywhere; }
+.session-credit-info-row { min-height:24px; padding:2px 6px; margin-inline-end:8px; }
+.session-credit-info-row strong { font-weight:500; }
+@media(pointer:coarse) { .session-credit-info-row { min-height:44px; } }
+
+.session-credit-setup { border-top:1px solid var(--border); padding-top:10px; margin-top:10px; }
+.session-credit-setup h4 { margin:0 0 8px; font-size:12px; }
+.session-credit-install { display:block; padding:8px; background:var(--accent); border-radius:5px; overflow-wrap:anywhere; white-space:pre-wrap; user-select:all; }
+.session-credit-setup-actions { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+.session-credit-setup-actions button { font-size:12px; padding:5px 8px; border:1px solid var(--border); }
+
+.session-credit-dialog {
+  width:min(560px,calc(100vw - 24px)); max-width:calc(100vw - 24px); max-height:calc(100dvh - 24px);
+  margin:auto; padding:0; border:1px solid var(--border); border-radius:10px;
+  color:var(--foreground); background:var(--background,var(--canvas)); overflow:hidden;
+  box-shadow:0 18px 60px color-mix(in srgb,var(--foreground) 20%,transparent);
+}
+.session-credit-dialog::backdrop { background:color-mix(in srgb,var(--foreground) 25%,transparent); }
+.session-credit-dialog > .session-credit-details { max-height:min(80dvh,680px); }

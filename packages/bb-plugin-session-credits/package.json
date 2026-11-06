@@ -1,0 +1,60 @@
+{
+  "name": "bb-plugin-session-credits",
+  "version": "0.2.0",
+  "license": "MIT",
+  "keywords": ["bb-plugin", "copilot", "ai-credits"],
+  "type": "module",
+  "engines": {
+    "bb": ">=0.48.1",
+    "node": ">=22.19.0",
+    "bbPluginSdk": ">=0.6.104"
+  },
+  "bb": {
+    "name": "Copilot session credits",
+    "description": "GitHub Copilot credits beside the context indicator. Pi receipts and Copilot CLI checkpoints.",
+    "branding": {
+      "icon": "Coins"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx",
+    "host": "./host.ts",
+    "skills": []
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "0.6.104",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "better-sqlite3": "^12.0.0",
+    "cron-parser": "^5.5.0",
+    "hono": "^4.11.9",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  },
+  "private": true,
+  "description": "BB plugin: per-session Copilot AI Credits beside the context-window indicator (Pi + Copilot CLI).",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "bb plugin build .",
+    "test:accounting": "node test/accounting-test.mjs",
+    "test:host": "npm run build && node test/integration-test.mjs",
+    "test:frontend": "node test/frontend-test.mjs",
+    "test:footer": "node test/footer-placement-test.mjs > footer-placement-test.html",
+    "test": "npm run typecheck && npm run test:accounting && npm run test:host && npm run test:frontend"
+  },
+  "author": "Lalit Rao",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lalitjeevanrao/copilot-session-credits.git",
+    "directory": "packages/bb-plugin-session-credits"
+  },
+  "homepage": "https://github.com/lalitjeevanrao/copilot-session-credits#readme",
+  "bugs": {
+    "url": "https://github.com/lalitjeevanrao/copilot-session-credits/issues"
+  }
+}
