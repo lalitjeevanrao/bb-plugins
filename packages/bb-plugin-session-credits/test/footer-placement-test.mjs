@@ -6,15 +6,23 @@ console.log(`<!doctype html><meta charset="utf-8"><title>Session credits placeme
 ${source}
 const results = [], check = (name, value) => results.push({name, status:value ? 'passed' : 'failed'});
 const tick = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-const make = () => {
+const make = (context = true) => {
   const root = document.createElement('div'); root.setAttribute('data-app-composer','');
-  root.innerHTML = '<i></i><div data-follow-up-composer-footer><div><button aria-label="Context window 16% used">16%</button></div></div>';
+  root.innerHTML = '<i></i><div data-follow-up-composer-footer><div>Environment</div><div class="flex shrink-0 items-center">'+(context ? '<button aria-label="Context window 16% used">16%</button>' : '')+'</div></div>';
   document.getElementById('fixtures').append(root);
   return {root, anchor:root.querySelector('i'), footer:root.querySelector('[data-follow-up-composer-footer]')};
 };
-const one = make(), two = make(); let target, second;
+const one = make(false), two = make(); let target, second;
 const dispose = attachCreditTarget(one.anchor, node => target = node);
 const button = () => one.footer.querySelector('button');
+const originalTarget = target;
+check('Pre-context setup reserves the stable footer action group', target?.parentNode === one.footer.lastElementChild);
+const firstButton = document.createElement('button');firstButton.setAttribute('aria-label','Context window 16% used');firstButton.textContent='16%';one.footer.lastElementChild.append(firstButton);await tick();
+check('Context arrival reuses the same target immediately before the indicator',target===originalTarget&&target.nextSibling===firstButton);
+firstButton.remove();await tick();
+check('Context removal preserves the same footer target without toolbar fallback',target===originalTarget&&target.parentNode===one.footer.lastElementChild);
+one.footer.lastElementChild.append(firstButton);await tick();
+
 check('Own container immediately precedes context control; BB control unchanged', target?.nextSibling === button() && target.parentNode === button().parentNode && button().textContent === '16%');
 check('Another composer is not touched', !two.root.querySelector('[data-session-credit-info]'));
 const disposeTwo = attachCreditTarget(two.anchor, node => second = node);

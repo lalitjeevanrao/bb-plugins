@@ -5,10 +5,18 @@ export function attachCreditTarget(anchor, change) {
   if (!root) { change(null); return () => {}; }
   let host = null;
   const sync = () => {
-    const buttons = [...root.querySelectorAll('[data-follow-up-composer-footer] button[aria-label^="Context window"]')]
-      .filter(button => button.closest('[data-app-composer]') === root);
-    const button = buttons.length === 1 ? buttons[0] : null;
-    if (!button) { host?.remove(); host = null; change(null); return; }
+    const footers = [...root.querySelectorAll('[data-follow-up-composer-footer]')]
+      .filter(footer => footer.closest('[data-app-composer]') === root);
+    const footer = footers.length === 1 ? footers[0] : null;
+    const group = footer?.lastElementChild;
+    const buttons = footer ? [...footer.querySelectorAll('button[aria-label^="Context window"]')]
+      .filter(button => button.closest('[data-app-composer]') === root) : [];
+    const validGroup = footer?.children.length === 2 && [...footer.children].every(child => child.tagName === 'DIV')
+      && group.classList.contains('shrink-0') && group.classList.contains('items-center');
+    const button = buttons[0] ?? null;
+    if (!validGroup || buttons.length > 1 || (button && button.parentNode !== group)) {
+      host?.remove(); host = null; change(null); return;
+    }
     if (!host) {
       host = anchor.ownerDocument.createElement('span');
       host.setAttribute('data-session-credit-info', '');
@@ -16,8 +24,8 @@ export function attachCreditTarget(anchor, change) {
       host.setAttribute('data-bb-plugin', 'session-credits');
       host.style.display = 'contents';
     }
-    if (host.parentNode !== button.parentNode || host.nextSibling !== button)
-      button.parentNode.insertBefore(host, button);
+    if (host.parentNode !== group || host.nextSibling !== button)
+      group.insertBefore(host, button);
     change(host);
   };
   const observer = new MutationObserver(sync);

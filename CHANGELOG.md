@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] — 2026-11-06
+
+- Keep setup and recorded credits in the composer footer before context usage is available.
+- Fix disclosure interaction in the anchored details panel.
+- Replace setup-only screenshots with live Copilot CLI and Pi usage examples.
+
 ## [0.2.1] — 2026-11-06
 
 - Open credit details beside the indicator, without a centered modal or backdrop.

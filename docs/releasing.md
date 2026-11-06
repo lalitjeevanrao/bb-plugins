@@ -1,6 +1,6 @@
 # Release checklist
 
-The current release is v0.2.1. The implementation uses released BB APIs and requires no BB core feature approval. Copilot CLI works from the BB installation; Pi requires its separately installed companion and an authenticated Pi 1.5.0+ runtime.
+The current release is v0.2.2. The implementation uses released BB APIs and requires no BB core feature approval. Copilot CLI works from the BB installation; Pi requires its separately installed companion and an authenticated Pi 1.5.0+ runtime.
 
 ## Validate the source
 
@@ -11,7 +11,7 @@ The current release is v0.2.1. The implementation uses released BB APIs and requ
 
 ## Publish the Git release
 
-Destination: public `lalitjeevanrao/copilot-session-credits`; root Pi package and `packages/bb-plugin-session-credits` share v0.2.1. Leave npm `private: true`; no npm/PyPI publication is needed.
+Destination: public `lalitjeevanrao/copilot-session-credits`; root Pi package and `packages/bb-plugin-session-credits` share v0.2.2. Leave npm `private: true`; no npm/PyPI publication is needed.
 
 Release from `main`, which contains the public history. Never merge or push the private `implementation/monorepo` branch: it contains historical screenshots excluded from publication. Exclude dependencies, build output and local review artifacts.
 
@@ -25,7 +25,7 @@ Read the current `get-bb/marketplace` README, v2 schema, categories, icon rules 
 
 Prepare:
 
-- `entries/session-credits.json`: Copilot session credits; author Lalit Rao / lalitjeevanrao; category token-usage-and-limits; public Git source, subdir `packages/bb-plugin-session-credits`, range `^0.2.0`.
+- `entries/session-credits.json`: Copilot session credits; author Lalit Rao / lalitjeevanrao; category token-usage-and-limits; public Git source, subdir `packages/bb-plugin-session-credits`, range `^0.2.2`.
 - A square theme-aware coin icon under `icons/`, <=256 KB, named with the first eight SHA256 characters.
 - `overview/session-credits.md`, copied from PLUGIN_OVERVIEW.md, under 4000 characters with permitted Markdown and absolute HTTPS links.
 - Two or three actual installed-UI screenshots under `screenshots/session-credits/`, each >=1200 px wide and <=2 MiB. Reference every included image.

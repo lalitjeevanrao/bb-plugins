@@ -2,9 +2,9 @@
 
 GitHub Copilot AI Credits beside BB’s context indicator. Click for usage details or Pi setup instructions.
 
-![Credits in BB](../../docs/screenshots/composer.png)
+![Copilot CLI session credits](../../docs/screenshots/copilot-cli.png)
 
-![Pi setup beside the credits indicator](../../docs/screenshots/setup.png)
+![Pi with GitHub Copilot session credits](../../docs/screenshots/pi-copilot.png)
 
 See the [installation guide](../../README.md) for requirements, setup and updates.
 

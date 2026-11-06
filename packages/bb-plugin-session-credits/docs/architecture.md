@@ -59,8 +59,10 @@ BB already runs the CLI via `acp-copilot` / `acp-gh-copilot`. The host reader op
 
 See [accounting.md](accounting.md).
 
-The detail panel uses BB’s shared Radix Popover runtime. Its portal escapes composer overflow while staying anchored above the clicked control. It has no backdrop or modal focus trap. Escape, outside interaction and the close control dismiss it; keyboard dismissal returns focus to the trigger. The panel shares the control’s usage state and polling hook.
+The detail panel uses BB’s shared Radix Popover runtime. Its portal escapes composer overflow while staying anchored above the clicked control. It has no backdrop or modal focus trap. Escape, outside interaction and the close control dismiss it; keyboard dismissal returns focus to the trigger. The panel shares the control’s usage state and polling hook. Mouse-down events stop at the panel boundary so React portal bubbling cannot make the composer steal focus before a native disclosure click. Default browser behavior is preserved.
 
 ## Why a DOM adapter
 
-BB SDK `0.6.104` exposes composer actions/banners/popups but no footer slot. The adapter starts at a hidden origin inside the composer customization, scopes to its own `[data-app-composer]`, requires **exactly one** `[data-follow-up-composer-footer] button[aria-label^="Context window"]` that belongs to that same composer, and portals a span before it (8 px trailing margin to avoid hit-box overlap in narrow layouts). A scoped `MutationObserver` handles replacement/absence/ambiguity; cleanup removes only its own span. Anything else falls back to the toolbar or the compact banner.
+BB SDK `0.6.104` exposes composer actions/banners/popups but no footer slot. The adapter starts at a hidden origin inside the composer customization and scopes to its own `[data-app-composer]`. It places credits before the context control when present, or at the end of the same footer action group before context usage is available. Setup and recorded usage therefore share a location.
+
+A scoped `MutationObserver` handles replacement, absence and ambiguity; cleanup removes only the plugin’s own span. Unsupported or ambiguous markup falls back to the toolbar or compact banner rather than attaching to another composer. This private DOM integration may need adjustment after BB layout changes.

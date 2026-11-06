@@ -49,10 +49,11 @@ function CreditControl({ placement = "toolbar" }: { placement?: "toolbar" | "com
   const { usage, hidden, label, providerLabel, details } = credits;
   if (hidden) return null;
   const amount = displayAic(usage?.aic ?? null), description = `${usage?.source === "pi-receipts" ? "Observed" : "Session"} ${amount} AIC · ${label} · ${providerLabel}`;
+  // React portal mouse events otherwise reach the composer handler that steals focus.
   return <Popover.Root modal={false}><Popover.Trigger asChild><button type="button" className={`session-credit-control session-credit-${placement}`} data-testid="session-credit-meter" data-placement={placement}
     title={description} aria-label={`Copilot session credits: ${amount} AIC, ${label}, ${providerLabel}`} aria-haspopup="dialog">
     <CoinIcon/><strong>{details.setup && usage?.aic == null ? "Set up credits" : <>{amount} <span>AIC</span></>}</strong><span className="session-credit-dot" data-state={label} data-tone={details.tone} aria-hidden="true"/>
-  </button></Popover.Trigger><Popover.Portal><Popover.Content data-bb-plugin-root="" data-bb-plugin="session-credits" className="session-credit-panel" side="top" align="end" sideOffset={8} collisionPadding={12} aria-labelledby={titleId}>
+  </button></Popover.Trigger><Popover.Portal><Popover.Content data-bb-plugin-root="" data-bb-plugin="session-credits" className="session-credit-panel" onMouseDown={event => event.stopPropagation()} side="top" align="end" sideOffset={8} collisionPadding={12} aria-labelledby={titleId}>
     <CreditDetails credits={credits} titleId={titleId}/>
   </Popover.Content></Popover.Portal></Popover.Root>;
 }

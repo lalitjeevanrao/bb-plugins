@@ -2,13 +2,21 @@
 
 GitHub Copilot AI Credits for the current BB thread, beside the context indicator. Click the indicator to see usage or set up Pi capture.
 
-![Copilot session credits beside BB’s context indicator](docs/screenshots/composer.png)
+## In use
 
-Copilot CLI works with the BB plugin alone. Pi Coding Agent needs one additional extension. The plugin shows **Set up credits** until capture is confirmed.
+**Copilot CLI** — session credits beside the context indicator. No companion installation required.
 
-![Pi installation instructions open beside the credits indicator](docs/screenshots/setup.png)
+![Copilot CLI showing 0.8235 AIC for the current BB thread](docs/screenshots/copilot-cli.png)
 
-Screenshots show an empty demo thread in BB. No billing data is simulated.
+Click the amount for the latest checkpoint and session scope.
+
+![Copilot CLI usage details showing a recorded checkpoint](docs/screenshots/copilot-cli-details.png)
+
+**Pi with GitHub Copilot** — credits captured by the Pi companion. Pi coverage is partial; earlier calls and hidden retries may be missing.
+
+![Pi with GitHub Copilot showing 2.5768 AIC for the current BB thread](docs/screenshots/pi-copilot.png)
+
+Screenshots from live user QA. Amounts shown belong to those sessions, not a remaining subscription balance.
 
 ## Install
 
@@ -17,7 +25,7 @@ Requires **BB 0.48.1+** and authenticated GitHub Copilot access. Tested on macOS
 Install **Copilot session credits** from BB Community when available, or from Git:
 
 ```sh
-bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.1 --plugin session-credits
+bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.2 --plugin session-credits
 ```
 
 **Copilot CLI:** no extra installation. Credits appear when the CLI reports usage.
@@ -25,7 +33,7 @@ bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.
 **Pi Coding Agent:** requires Pi **1.5.0+**. On the machine running Pi:
 
 ```sh
-pi install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.1
+pi install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.2
 ```
 
 Use the same Pi executable and agent directory as BB. For remote threads, install on the remote host. Match any `PI_CODING_AGENT_DIR` or custom launcher configuration.
@@ -48,14 +56,18 @@ Copilot CLI usage is read from a bounded local log tail. Only usage fields are r
 
 ## Update or remove
 
-Install a newer release tag with the same commands above, then restart existing Pi sessions. Pinned tags do not update automatically.
+Git-tag installs are pinned. To replace an older BB release:
 
 ```sh
 bb plugin remove session-credits
-pi remove git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.1
+bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.2 --plugin session-credits
 ```
 
-Only run the Pi command if you installed the companion. Removing either package preserves receipts. The receipt folder has a 256-entry limit; [archive old receipts with Pi stopped](docs/cleanup.md).
+Refresh the BB window after updating. **The v0.2.2 fixes affect the BB UI only; the Pi companion from v0.2.1 can stay installed.** No Pi restart is needed for this UI update.
+
+For a future companion update, use `pi list` to find the installed source, remove that exact source with `pi remove`, then install the newer tag and restart existing Pi sessions.
+
+To uninstall the BB display, run `bb plugin remove session-credits`. To uninstall the companion, run `pi remove` with its installed Git source. Removing either package preserves receipts. The receipt folder has a 256-entry limit; [archive old receipts with Pi stopped](docs/cleanup.md).
 
 ## Development
 
