@@ -129,7 +129,7 @@ try {
     const data = rows(directory), observations = data.filter(row => row.kind === 'observation');
     assert.equal(observations.length, 2); assert.notEqual(observations[0].epoch, observations[1].epoch);
     assert.notEqual(observations[0].callId, observations[1].callId);
-    assert(!JSON.stringify(data).includes('999'));
+    assert.deepEqual(observations.flatMap(row => row.billing.map(value => value.nanoAiu)).sort(), ['5', '8']);
     const stopped = data.filter(row => row.kind === 'capture_stopped');
     assert.equal(stopped.find(row => row.epoch === observations.find(row => row.billing.some(value => value.nanoAiu === '5')).epoch).inFlight, 1);
     assert.equal(stopped.find(row => row.epoch === observations.find(row => row.billing.some(value => value.nanoAiu === '8')).epoch).inFlight, 0);
