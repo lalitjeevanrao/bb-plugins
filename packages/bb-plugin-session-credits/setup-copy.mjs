@@ -1,4 +1,4 @@
-export const piInstallCommand = 'pi install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.0';
+export const piInstallCommand = 'pi install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.1';
 export async function copyPiInstallCommand(clipboard = globalThis.navigator?.clipboard) {
   try {
     if (!clipboard?.writeText) throw Error('Clipboard unavailable');

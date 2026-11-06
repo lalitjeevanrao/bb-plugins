@@ -1,8 +1,12 @@
 {
   "name": "bb-plugin-session-credits",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
-  "keywords": ["bb-plugin", "copilot", "ai-credits"],
+  "keywords": [
+    "bb-plugin",
+    "copilot",
+    "ai-credits"
+  ],
   "type": "module",
   "engines": {
     "bb": ">=0.48.1",
@@ -25,6 +29,7 @@
   },
   "devDependencies": {
     "@get-bb/plugin-sdk": "0.6.104",
+    "@radix-ui/react-popover": "^1.1.19",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

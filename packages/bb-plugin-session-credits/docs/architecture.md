@@ -27,7 +27,7 @@ flowchart TB
 
 | Layer | Does | Does **not** |
 | --- | --- | --- |
-| `app.tsx` | Renders one control per composer layout; opens a native HTML dialog through BB’s popup lifecycle | Compute credits, read files |
+| `app.tsx` | Renders one control per composer layout; opens a nonmodal Radix Popover anchored to that control | Compute credits, read files |
 | `server.ts` | Resolves *this thread's* provider, session identity and host | Read prompts, assistant text or tool output |
 | `host.ts` | Reads scalar receipts / latest checkpoint on the right machine, with limits | Send transcripts, follow symlinks, delete anything |
 | `accounting.mjs` | Exact `BigInt` nano-AIU → AIC; Pi subtotal; CLI checkpoint; meter state | Estimate, convert tokens, sum checkpoints |
@@ -59,7 +59,7 @@ BB already runs the CLI via `acp-copilot` / `acp-gh-copilot`. The host reader op
 
 See [accounting.md](accounting.md).
 
-The detail panel uses a native HTML modal dialog so BB’s composer overflow does not clip setup guidance. Escape and the close control dismiss it; browser modal focus containment and focus restoration keep keyboard navigation usable.
+The detail panel uses BB’s shared Radix Popover runtime. Its portal escapes composer overflow while staying anchored above the clicked control. It has no backdrop or modal focus trap. Escape, outside interaction and the close control dismiss it; keyboard dismissal returns focus to the trigger. The panel shares the control’s usage state and polling hook.
 
 ## Why a DOM adapter
 

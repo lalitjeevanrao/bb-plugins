@@ -1,6 +1,6 @@
 # Release checklist
 
-The first public release is v0.2.0. The implementation uses released BB APIs and requires no BB core feature approval. Copilot CLI works from the BB installation; Pi requires its separately installed companion and an authenticated Pi 1.5.0+ runtime.
+The current release is v0.2.1. The implementation uses released BB APIs and requires no BB core feature approval. Copilot CLI works from the BB installation; Pi requires its separately installed companion and an authenticated Pi 1.5.0+ runtime.
 
 ## Validate the source
 
@@ -11,9 +11,9 @@ The first public release is v0.2.0. The implementation uses released BB APIs and
 
 ## Publish the Git release
 
-Destination: public `lalitjeevanrao/copilot-session-credits`; root Pi package and `packages/bb-plugin-session-credits` share v0.2.0. Leave npm `private: true`; no npm/PyPI publication is needed.
+Destination: public `lalitjeevanrao/copilot-session-credits`; root Pi package and `packages/bb-plugin-session-credits` share v0.2.1. Leave npm `private: true`; no npm/PyPI publication is needed.
 
-Prepare a clean parentless first-public snapshot. The local development history contains removed historical screenshots; it must not be pushed. Exclude dependencies, build output, local review artifacts, private data and superseded internal plans. Preserve the local development branch separately.
+Release from `main`, which contains the public history. Never merge or push the private `implementation/monorepo` branch: it contains historical screenshots excluded from publication. Exclude dependencies, build output and local review artifacts.
 
 Before mutation, show the exact authenticated account, destination, release SHA, package/version, immutable tag and remote commands as required by BB Guide's submit-a-plugin release checkpoint. Publish only the reviewed source; never retag a release. Enable private vulnerability reporting. Turn the unreleased changelog into a dated release entry and remove candidate-only wording before the final release commit.
 

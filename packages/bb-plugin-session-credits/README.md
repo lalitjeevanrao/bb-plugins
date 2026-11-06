@@ -1,13 +1,15 @@
 # Copilot session credits
 
-Display recorded GitHub Copilot session credits beside BB's context indicator. Copilot CLI uses native checkpoints. Pi requires the companion installed through Pi's package manager; the clickable setup indicator explains the second step.
+GitHub Copilot AI Credits beside BB’s context indicator. Click for usage details or Pi setup instructions.
 
-This directory is the complete BB plugin source. The repository root is the separate Pi package entrypoint. Both share release v0.2.0; neither requires npm publication.
+![Credits in BB](../../docs/screenshots/composer.png)
 
-Requirements: BB 0.48.1+, Node 22.19+ for local development, and an authenticated provider. Pi capture requires Pi 1.5.0+. Tested on macOS. Pi coverage remains partial; missing usage never becomes zero.
+![Pi setup beside the credits indicator](../../docs/screenshots/setup.png)
 
-The BB server reads only the current thread's identity and routes to its exact host. The host independently reads scalar usage and private per-session startup readiness. No automatic installer, custom launcher or BB core modification is used. Historic amounts remain visible when capture is unavailable.
+See the [installation guide](../../README.md) for requirements, setup and updates.
 
-From the repository root, run `npm test`. Install a local candidate with `bb plugin install . --plugin session-credits`. For production installation, follow the [root guide](../../README.md).
+This directory contains the BB plugin and shared collector. The repository root supplies the Pi package entrypoint. Copilot CLI needs only the BB plugin; Pi requires the companion and Pi 1.5.0+.
 
-[Accounting](docs/accounting.md) · [Receipt contract](docs/receipt-contract.md) · [Architecture](docs/architecture.md) · [MIT](LICENSE).
+From the repository root, run `npm test`. Install locally with `bb plugin install . --plugin session-credits`.
+
+[Accounting](docs/accounting.md) · [Receipt contract](docs/receipt-contract.md) · [Architecture](docs/architecture.md) · [MIT](LICENSE)

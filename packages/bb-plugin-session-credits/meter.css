@@ -51,11 +51,11 @@
 .session-credit-setup-actions { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
 .session-credit-setup-actions button { font-size:12px; padding:5px 8px; border:1px solid var(--border); }
 
-.session-credit-dialog {
-  width:min(560px,calc(100vw - 24px)); max-width:calc(100vw - 24px); max-height:calc(100dvh - 24px);
-  margin:auto; padding:0; border:1px solid var(--border); border-radius:10px;
-  color:var(--foreground); background:var(--background,var(--canvas)); overflow:hidden;
-  box-shadow:0 18px 60px color-mix(in srgb,var(--foreground) 20%,transparent);
+.session-credit-panel {
+  z-index:50; width:min(390px,calc(100vw - 24px)); max-width:var(--radix-popover-content-available-width);
+  max-height:min(640px,var(--radix-popover-content-available-height)); box-sizing:border-box;
+  border:1px solid var(--border); border-radius:8px; color:var(--foreground);
+  background:var(--popover,var(--background)); overflow:hidden;
+  box-shadow:0 8px 24px color-mix(in srgb,var(--foreground) 15%,transparent);
 }
-.session-credit-dialog::backdrop { background:color-mix(in srgb,var(--foreground) 25%,transparent); }
-.session-credit-dialog > .session-credit-details { max-height:min(80dvh,680px); }
+.session-credit-panel > .session-credit-details { max-height:min(640px,var(--radix-popover-content-available-height)); }

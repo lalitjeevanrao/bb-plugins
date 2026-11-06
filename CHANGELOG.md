@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1] — 2026-11-06
+
+- Open credit details beside the indicator, without a centered modal or backdrop.
+- Add real BB screenshots to the repository and README.
+- Shorten installation instructions and marketplace copy.
+
 ## [0.2.0] — 2026-11-06
 
 First public release. Author: Lalit Rao.
