@@ -25,7 +25,7 @@ bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@composer-
 
 Each plugin installs on its own: pick only the ones you want, and update or remove them separately. Use `bb plugin remove <id>` to uninstall.
 
-From a local clone, `bb plugin install . --plugin <name>` installs the same package the tagged release ships.
+From a local clone, `bb plugin install . --plugin <name>` installs the same package the tagged release ships. On a second machine, [`docs/install-on-another-machine.sh`](docs/install-on-another-machine.sh) runs the three pinned installs (with the optional Pi companion commented out).
 
 ## Releases
 
