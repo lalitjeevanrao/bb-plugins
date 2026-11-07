@@ -3,8 +3,9 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const indexPath = join(root, '.bb/plugins.json');
 const index = JSON.parse(readFileSync(indexPath, 'utf8'));
 const read = path => JSON.parse(readFileSync(join(root, path), 'utf8'));
