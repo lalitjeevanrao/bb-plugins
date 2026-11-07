@@ -17,7 +17,7 @@ Requires **BB 0.49.0+** for Home Hero and Composer Auto-collapse, **BB 0.48.1+**
 bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.1 --plugin copilot-session-credits
 
 # Home Hero
-bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@home-hero/v0.1.1 --plugin home-hero
+bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@home-hero/v0.1.2 --plugin home-hero
 
 # Composer Auto-collapse
 bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@composer-autocollapse/v0.1.0 --plugin composer-autocollapse

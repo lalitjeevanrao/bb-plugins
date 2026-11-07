@@ -11,7 +11,7 @@ The greeting keeps the original Palatino italic / Georgia small-caps typography 
 Requires **BB 0.49.0+**. Tested on macOS.
 
 ```sh
-bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@home-hero/v0.1.1 --plugin home-hero
+bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@home-hero/v0.1.2 --plugin home-hero
 ```
 
 From a clone: `bb plugin install .` inside this directory.
