@@ -1,0 +1,60 @@
+{
+  "name": "bb-plugin-home-hero",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "description": "BB plugin: a time-of-day greeting with an optional name and uploaded icon on the home screen.",
+  "keywords": [
+    "bb-plugin",
+    "home",
+    "greeting"
+  ],
+  "engines": {
+    "bb": ">=0.49.0",
+    "node": ">=22.19.0",
+    "bbPluginSdk": ">=0.6.132"
+  },
+  "bb": {
+    "name": "Home Hero",
+    "description": "Greet the home screen with the time of day, an optional name and an icon you upload.",
+    "branding": {
+      "icon": "Sunrise"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx",
+    "skills": []
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "0.6.104",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "better-sqlite3": "^12.11.1",
+    "cron-parser": "^5.10.4",
+    "hono": "^4.13.17",
+    "jsdom": "^26.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "bb plugin build .",
+    "test": "node test/appearance.test.mjs && node test/greeting.test.mjs && node test/lifecycle.test.mjs && node test/server.test.mjs"
+  },
+  "author": "Lalit Rao",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lalitjeevanrao/copilot-session-credits.git",
+    "directory": "packages/bb-plugin-home-hero"
+  },
+  "homepage": "https://github.com/lalitjeevanrao/copilot-session-credits#readme",
+  "bugs": {
+    "url": "https://github.com/lalitjeevanrao/copilot-session-credits/issues"
+  }
+}
