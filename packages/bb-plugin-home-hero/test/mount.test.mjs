@@ -48,7 +48,7 @@ test("mounts when a home target arrives after starting on a thread", async () =>
   const hero = doc.getElementById(HERO_ID);
   assert.ok(hero, "hero attaches once the home composer appears");
   assert.equal(hero.parentElement, doc.getElementById("home-column"));
-  assert.equal(doc.querySelector(".bb-hero-name").textContent, "Alex", "configured name renders");
+  assert.equal(doc.querySelector(".bb-hero-typed .bb-hero-name").textContent, "Alex", "configured name renders");
   cleanup();
 });
 
@@ -80,14 +80,14 @@ test("handles the compact home target", async () => {
 test("applies a changed appearance when the home target comes back", async () => {
   const { doc, state, cleanup } = setup(HOME);
   await tick();
-  assert.equal(doc.querySelector(".bb-hero-name").textContent, "Alex");
+  assert.equal(doc.querySelector(".bb-hero-typed .bb-hero-name").textContent, "Alex");
 
   state.appearance = { displayName: "Blair", iconDataUrl: null };
   swapBody(doc, THREAD);
   await tick();
   swapBody(doc, HOME);
   await tick();
-  assert.equal(doc.querySelector(".bb-hero-name").textContent, "Blair");
+  assert.equal(doc.querySelector(".bb-hero-typed .bb-hero-name").textContent, "Blair");
   cleanup();
 });
 
