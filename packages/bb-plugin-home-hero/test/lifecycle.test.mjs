@@ -109,7 +109,64 @@ test("disposal removes the hero, styles and column marker", () => {
 test("reduced motion shows the full greeting immediately", () => {
   const doc = page();
   applyHero(doc, { hours: 9, displayName: "Alex", reducedMotion: true });
-  assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning, Alex");
+  assert.equal(doc.querySelector(".bb-hero-sizer").textContent, "Morning, Alex");
+  assert.equal(doc.querySelector(".bb-hero-typed").textContent, "Morning, Alex");
+});
+
+test("typing reserves the final width and writes only on character change", async () => {
+  const doc = page();
+  const view = doc.defaultView;
+  const queue = [];
+  let now = 0;
+  const realNow = Date.now;
+  view.requestAnimationFrame = fn => { queue.push(fn); return queue.length; };
+  view.cancelAnimationFrame = () => {};
+  Date.now = () => 1000 + now;
+  try {
+    const dispose = applyHero(doc, { hours: 9, displayName: "Alex" });
+    const greeting = doc.querySelector(".bb-hero-greeting");
+    const sizer = doc.querySelector(".bb-hero-sizer");
+    const typed = doc.querySelector(".bb-hero-typed");
+    // The in-flow sizer carries the complete string; the typed copy overlays it.
+    assert.equal(sizer.textContent, "Morning, Alex");
+    assert.equal(sizer.getAttribute("aria-hidden"), "true");
+    assert.equal(greeting.firstElementChild, sizer);
+    assert.equal(greeting.lastElementChild, typed);
+    assert.equal(typed.textContent, "");
+    assert.equal(view.getComputedStyle(typed).position, "absolute");
+    assert.equal(view.getComputedStyle(sizer).visibility, "hidden");
+
+    const writes = [];
+    const observer = new view.MutationObserver(records => writes.push(...records));
+    observer.observe(typed, { subtree: true, childList: true, characterData: true });
+    const pump = at => {
+      now = at;
+      for (const fn of queue.splice(0)) fn(1000 + now);
+    };
+
+    pump(150);
+    assert.equal(typed.textContent, "", "the entrance plays before typing starts");
+    pump(300);
+    const midway = typed.textContent;
+    assert.ok(midway.length > 0 && midway.length < "Morning, Alex".length);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const writesAfterGrowth = writes.length;
+    assert.ok(writesAfterGrowth > 0);
+
+    pump(300);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(writes.length, writesAfterGrowth, "unchanged length must not rewrite the DOM");
+
+    pump(2200);
+    assert.equal(typed.textContent, "Morning, Alex");
+    assert.equal(queue.length, 0, "typing stops after the final frame");
+    assert.equal(sizer.textContent, "Morning, Alex", "the reserved width never changes");
+
+    dispose();
+    assert.equal(doc.getElementById(HERO_ID), null);
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 test("skips a CSS-hidden home tree in favour of the visible one", () => {

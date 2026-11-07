@@ -17,8 +17,8 @@ command -v bb >/dev/null 2>&1 || {
 echo "==> Copilot session credits (v0.3.1)"
 bb plugin install "git:${REPO_URL}@v0.3.1" --plugin copilot-session-credits
 
-echo "==> Home Hero (home-hero/v0.1.0)"
-bb plugin install "git:${REPO_URL}@home-hero/v0.1.0" --plugin home-hero
+echo "==> Home Hero (home-hero/v0.1.1)"
+bb plugin install "git:${REPO_URL}@home-hero/v0.1.1" --plugin home-hero
 
 echo "==> Composer Auto-collapse (composer-autocollapse/v0.1.0)"
 bb plugin install "git:${REPO_URL}@composer-autocollapse/v0.1.0" --plugin composer-autocollapse
