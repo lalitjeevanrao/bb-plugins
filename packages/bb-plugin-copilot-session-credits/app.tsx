@@ -15,7 +15,6 @@ function useSessionCredits() {
   const rpc = useRpc<typeof rpcContract>(), connection = useRealtimeConnectionState();
   const [state, setState] = useState<{ threadId: string; usage: Usage; provider: string; sessionId: string | null } | null>(null);
   const [failed, setFailed] = useState(false);
-  const [retry, setRetry] = useState(0);
   useEffect(() => {
     setFailed(false);
     if (!threadId) return;
@@ -34,12 +33,12 @@ function useSessionCredits() {
     const timer = setInterval(refresh, 5000);
     document.addEventListener("visibilitychange", refresh);
     return () => { alive = false; clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
-  }, [threadId, rpc, connection, selectedProvider, selectedModel, retry]);
+  }, [threadId, rpc, connection, selectedProvider, selectedModel]);
   const current = state?.threadId === threadId ? state : null, usage = current?.usage;
   const hidden = !threadId || !!(current && current.provider !== "unknown" && !supported(current.provider));
   const stale = failed || connection !== "connected", details = creditDetails(usage, { stale, provider: current?.provider === "unknown" ? selectedProvider : current?.provider ?? selectedProvider, sessionId: current?.sessionId ?? null }), label = details.label;
   const providerLabel = current?.provider === "pi" ? (usage?.observed ? "Pi · Copilot" : "Pi") : current?.provider.startsWith("acp-") ? "Copilot CLI" : "Credits";
-  return { view, current, usage, hidden, stale, label, providerLabel, details, refresh: () => setRetry(value => value + 1) };
+  return { view, current, usage, hidden, stale, label, providerLabel, details };
 }
 function CoinIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><ellipse cx="9" cy="6" rx="6" ry="3"/><path d="M3 6v5c0 1.7 2.7 3 6 3M3 11v5c0 1.7 2.7 3 6 3M15 8c3.3 0 6 1.3 6 3s-2.7 3-6 3-6-1.3-6-3 2.7-3 6-3Zm-6 3v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>;
@@ -71,7 +70,7 @@ function CreditCompactFallback() {
   return useComposer().layout === "compact" ? <CreditPlacement compact/> : null;
 }
 function CreditDetails({ credits, titleId }: { credits: ReturnType<typeof useSessionCredits>; titleId: string }) {
-  const { current, usage, label, providerLabel, details, refresh } = credits;
+  const { current, usage, label, providerLabel, details } = credits;
   const [copyMessage, setCopyMessage] = useState("");
   const unconfigured = details.setup && usage?.aic == null;
   return <section className="copilot-session-credit-details" data-testid="copilot-session-credit-details" data-tone={details.tone}>
@@ -85,13 +84,13 @@ function CreditDetails({ credits, titleId }: { credits: ReturnType<typeof useSes
       {details.action && <p>{details.action}</p>}
     </div>}
     {details.setup && <section className="copilot-session-credit-setup" aria-label="Set up Pi credits">
-      <h4>Set up Pi credits</h4>
-      <p>Add the companion extension on the machine running this Pi session.</p>
+      <h4>Pi collector not detected</h4>
+      <p>If the companion is installed, restart this Pi session. Otherwise, install it below. Status updates automatically.</p>
       <code className="copilot-session-credit-install" tabIndex={0}>{piInstallCommand}</code>
-      <div className="copilot-session-credit-setup-actions"><button type="button" onClick={async () => setCopyMessage(await copyPiInstallCommand())}>Copy install command</button><button type="button" onClick={refresh}>Retry check</button></div>
+      <div className="copilot-session-credit-setup-actions"><button type="button" onClick={async () => setCopyMessage(await copyPiInstallCommand())}>Copy install command</button></div>
       {copyMessage && <p role="status">{copyMessage}</p>}
-      <p>Use Pi 1.5.0+ with Copilot signed in. Reload or restart this session after installing.</p>
-      <details><summary>Custom or remote setup</summary><p>Install on the execution host, using the same Pi runtime and agent directory as BB. Match PI_CODING_AGENT_DIR and any custom launcher configuration, then retry here.</p></details>
+      <p>Use Pi 1.5.0+ with Copilot signed in. Install on the machine running Pi.</p>
+      <details><summary>Custom or remote setup</summary><p>Use the same Pi runtime and agent directory as BB. For remote threads, install on the execution host. Match PI_CODING_AGENT_DIR and any custom launcher configuration.</p></details>
     </section>}
     {!unconfigured && details.coverage && <p className="copilot-session-credit-coverage">{details.coverage}</p>}
     {!unconfigured && <details className="copilot-session-credit-debug">
@@ -101,6 +100,7 @@ function CreditDetails({ credits, titleId }: { credits: ReturnType<typeof useSes
         {usage.inFlight > 0 && <> · {usage.inFlight} unfinished</>}
         {usage.conflicting > 0 && <> · {usage.conflicting} invalid or conflicting</>}
         {usage.missing > 0 && <> · {usage.missing} without credits</>}</p>}
+      {current?.provider === "pi" && usage?.readiness?.state !== "ready" && usage?.readiness?.reason && <p>Pi collector: {usage.readiness.reason}</p>}
       {usage?.updatedAt && <p>Last record: <time dateTime={usage.updatedAt}>{new Date(usage.updatedAt).toLocaleString(undefined, { timeZoneName: "short" })}</time></p>}
       {current?.sessionId && <code className="copilot-session-credit-session">{current.sessionId}</code>}
     </details>}

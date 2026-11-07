@@ -25,7 +25,7 @@ Requires **BB 0.48.1+** and authenticated GitHub Copilot access. Tested on macOS
 Install **Copilot session credits** from BB Community when available, or from Git:
 
 ```sh
-bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.3.0 --plugin copilot-session-credits
+bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.3.1 --plugin copilot-session-credits
 ```
 
 **Copilot CLI:** no extra installation. Credits appear when the CLI reports usage.
@@ -33,12 +33,12 @@ bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.
 **Pi Coding Agent:** requires Pi **1.5.0+**. On the machine running Pi:
 
 ```sh
-pi install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.3.0
+pi install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.3.1
 ```
 
 Use the same Pi executable and agent directory as BB. For remote threads, install on the remote host. Match any `PI_CODING_AGENT_DIR` or custom launcher configuration.
 
-Start a new session after installation. For an existing thread, stop its runtime with `bb thread stop <thread-id>`, then send your next message to resume it. **Retry check** refreshes the status; it does not restart Pi.
+Start a new session after installation. For an existing thread, stop its runtime with `bb thread stop <thread-id>`, then send your next message to resume it. Status refreshes automatically while BB is visible; it does not restart Pi.
 
 The companion collects usage for BB. It adds no meter to Pi’s TUI.
 
@@ -46,7 +46,7 @@ The companion collects usage for BB. It adds no meter to Pi’s TUI.
 
 The indicator shows credits **reported for this session**, not your remaining subscription balance or invoice total. Pi coverage is partial: earlier calls and hidden retries may be missing. A dash means unknown, not zero.
 
-Click the indicator for the exact amount, coverage and capture status. Recorded credits remain visible if capture later stops. **Ready — awaiting Copilot usage** means the Pi extension loaded, but has not recorded usage yet. **Capture unconfirmed** means BB cannot confirm capture; it does not necessarily mean the extension is missing.
+Click the indicator for the exact amount, coverage and capture status. Recorded credits remain visible if capture later stops. **Ready — awaiting Copilot usage** means the Pi extension loaded, but has not recorded usage yet. If a Pi amount is already recorded, the toolbar keeps **Recorded** even when the current collector cannot be found; its status and reason appear under Details.
 
 ## Privacy
 
@@ -60,12 +60,12 @@ Version 0.3.0 changes the BB plugin ID to `copilot-session-credits`. Remove the 
 
 ```sh
 bb plugin remove session-credits
-bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.3.0 --plugin copilot-session-credits
+bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.3.1 --plugin copilot-session-credits
 ```
 
 Refresh BB after updating. To replace a later pinned release, remove `copilot-session-credits` before installing the newer source.
 
-**Update the Pi companion too.** Use `pi list` with the same runtime and agent directory as BB, remove the exact currently installed source with `pi remove`, then install the v0.3.0 source shown above. Do not add a second Pi source alongside the old one. Stop/restart existing Pi sessions after the update; Retry check does not restart them. The Git repository URL is unchanged.
+**Update the Pi companion too.** Use `pi list` with the same runtime and agent directory as BB, remove the exact currently installed source with `pi remove`, then install the v0.3.1 source shown above. Do not add a second Pi source alongside the old one. Stop/restart existing Pi sessions after the update. The Git repository URL is unchanged.
 
 New receipt writes use `~/.pi/agent/copilot-session-credits/`; startup status uses `~/.pi/agent/copilot-session-credits-status/`. The BB reader also reads the legacy `~/.pi/agent/session-credits/` and `~/.pi/agent/session-credits-status/` as compatibility inputs. Existing data remains visible without moving or copying it. Both status roots are checked together: multiple live instances are unconfirmed rather than silently selecting one. No update or removal command deletes or moves receipts.
 
