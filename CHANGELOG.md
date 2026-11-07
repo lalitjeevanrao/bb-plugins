@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] — Unreleased
+
+- Keep recorded usage status independent from Pi collector readiness and BB connection state.
+- Show Pi setup guidance only before usage is recorded; rely on automatic status refresh instead of a redundant Retry check.
+- Show non-ready Pi collector diagnostics under Details.
+
 ## [0.3.0] — 2026-11-07
 
 - Breaking: rename the BB plugin ID/package to `copilot-session-credits`; display name remains Copilot session credits.

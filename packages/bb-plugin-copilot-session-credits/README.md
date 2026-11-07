@@ -16,4 +16,4 @@ From the repository root, run `npm test`. Install locally with `bb plugin instal
 
 ## Upgrading from the former BB ID
 
-Version 0.3.0 changes the machine ID to `copilot-session-credits`. Remove the old BB ID with `bb plugin remove session-credits`, then install the new ID. Use `pi list` and remove the exact old companion source before installing v0.3.0; restart existing Pi sessions. Never keep two companion installs active. The reader preserves access to legacy `~/.pi/agent/session-credits/` receipts and `~/.pi/agent/session-credits-status/` status alongside the new roots. No files are moved or deleted.
+Version 0.3.0 changes the machine ID to `copilot-session-credits`. Remove the old BB ID with `bb plugin remove session-credits`, then install the new ID. Use `pi list` and remove the exact old companion source before installing the current version; restart existing Pi sessions. Never keep two companion installs active. The reader preserves access to legacy `~/.pi/agent/session-credits/` receipts and `~/.pi/agent/session-credits-status/` status alongside the new roots. No files are moved or deleted.

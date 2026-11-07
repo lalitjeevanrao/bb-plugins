@@ -24,15 +24,16 @@ export function creditDetails(usage, { stale = false, provider, sessionId } = {}
   if (state === 'Unavailable' && pi && !action) action = 'Check /copilot-probe status in the BB-managed Pi session.';
   const readiness = usage?.readiness?.state ?? 'unconfirmed';
   const awaiting = pi && readiness === 'ready' && usage?.aic == null && !usage?.observed && !usage?.reported && !usage?.inFlight && !usage?.missing && !usage?.conflicting && !usage?.captureIssue && issues.size === 0;
-  const setup = pi && readiness === 'unconfirmed' && !stale && !issues.has('host-unavailable');
+  const noUsage = !!usage && usage.aic == null && !usage.observed && !usage.reported && !usage.inFlight && !usage.missing && !usage.conflicting && !usage.captureIssue && issues.size === 0;
+  const setup = pi && readiness === 'unconfirmed' && noUsage && !stale && !issues.has('host-unavailable');
   if (pi && !issues.has('host-unavailable')) {
     if (readiness === 'unconfirmed') {
-      label = 'Capture unconfirmed'; tone = 'warn';
-      if (sessionId === null) notes.push('Session not started or identity pending. You can set up credits before the first call.');
-      else if (/safely|ambiguous|Too many|alive/.test(usage?.readiness?.reason ?? '')) notes.push('Capture status could not be confirmed. Retry or check /copilot-probe status.');
-      action = null;
+      if (noUsage && !stale) {
+        if (sessionId === null) { label = 'Waiting for Pi session'; tone = 'info'; notes.push('Session not started or identity pending.'); }
+        else { label = 'Pi collector not detected'; tone = 'warn'; }
+      }
     } else if (awaiting) { label = 'Ready'; tone = 'info'; action = null; }
-    else if (readiness !== 'ready') {
+    else if (readiness !== 'ready' && noUsage) {
       label = readiness === 'unsupported' ? 'Pi unsupported' : readiness === 'disabled' ? 'Capture off' : 'Capture error'; tone = 'warn';
       notes.push(usage?.readiness?.reason ?? 'Check /copilot-probe status.');
       action = readiness === 'disabled' ? 'Run /copilot-probe on in this Pi session.' : readiness === 'unsupported' ? 'Use an authenticated Pi 1.5.0+ runtime, then reload or restart Pi.' : 'Check /copilot-probe status and receipt-folder permissions.';
@@ -40,7 +41,7 @@ export function creditDetails(usage, { stale = false, provider, sessionId } = {}
   }
   if (issues.has('host-unavailable')) { label = 'Unavailable'; tone = 'bad'; notes.push("Cannot read this session's host."); action = 'Check the BB host connection.'; }
   if (stale) {
-    label = 'Disconnected'; tone = 'warn';
+    if (usage?.aic == null) { label = 'Disconnected'; tone = 'warn'; }
     notes.unshift(usage?.aic != null ? 'Connection lost. Last value kept.' : 'Connection lost. No current reading.');
     action = 'Reconnect BB to refresh.';
   }
