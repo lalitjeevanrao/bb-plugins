@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3.1] — Unreleased
+## [0.3.1] — 2026-11-07
 
 - Keep recorded usage status independent from Pi collector readiness and BB connection state.
 - Show Pi setup guidance only before usage is recorded; rely on automatic status refresh instead of a redundant Retry check.
