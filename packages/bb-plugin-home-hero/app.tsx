@@ -9,5 +9,5 @@ export default definePluginApp(app => {
       return mountHomeHero({ signal });
     },
   });
-  app.slots.settingsSection({ id: "appearance", title: "Home hero icon", component: SettingsSection });
+  app.slots.settingsSection({ id: "appearance", component: SettingsSection });
 });

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.3
+
+- The icon setting now renders as a native settings card row, matching the
+  host's Greeting name row: same label and helper typography, card border,
+  padding and background, responsive stacking on narrow panels.
+- Upload, replace and remove use one busy lifecycle across decode, validation
+  and save; errors keep the previous icon and are announced through a status
+  region that stays invisible while idle.
+- The hidden file input is no longer a Tab stop; the visible button owns the
+  keyboard flow and opens the native picker.
+
 ## 0.1.2
 
 - The greeting types from the center outward again, like 0.1.0: the text grows
