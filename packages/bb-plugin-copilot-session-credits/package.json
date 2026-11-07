@@ -55,11 +55,11 @@
   "author": "Lalit Rao",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lalitjeevanrao/copilot-session-credits.git",
+    "url": "https://github.com/lalitjeevanrao/bb-plugins.git",
     "directory": "packages/bb-plugin-copilot-session-credits"
   },
-  "homepage": "https://github.com/lalitjeevanrao/copilot-session-credits#readme",
+  "homepage": "https://github.com/lalitjeevanrao/bb-plugins#readme",
   "bugs": {
-    "url": "https://github.com/lalitjeevanrao/copilot-session-credits/issues"
+    "url": "https://github.com/lalitjeevanrao/bb-plugins/issues"
   }
 }

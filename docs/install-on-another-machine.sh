@@ -5,15 +5,12 @@
 # It installs into the BB instance that `bb` talks to; nothing is removed or
 # upgraded automatically, and no prompt is skipped (add --yes yourself only if
 # you mean it).
-#
-# Before the repository rename, replace REPO_URL with
-#   https://github.com/lalitjeevanrao/copilot-session-credits.git
 set -eu
 
 REPO_URL="${REPO_URL:-https://github.com/lalitjeevanrao/bb-plugins.git}"
 
 command -v bb >/dev/null 2>&1 || {
-  echo "bb is required (BB 0.49.0 or newer): https://github.com/lalitjeevanrao/bb-app" >&2
+  echo "bb is required (BB 0.49.0 or newer): https://getbb.app" >&2
   exit 1
 }
 
