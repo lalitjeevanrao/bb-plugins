@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+- The greeting types from the center outward again, like 0.1.0: the text grows
+  in both directions and the icon moves out as characters appear.
+- The opacity entrance still finishes before typing, text is still written only
+  when the character count changes, and reduced motion or a missing
+  animation-frame API still show the full greeting immediately.
+
 ## 0.1.1
 
 - The greeting reserves its finished width before typing, so the icon and

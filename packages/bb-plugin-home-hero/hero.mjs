@@ -13,9 +13,7 @@ const CSS = `
 [${COLUMN_ATTR}]{min-height:100%;flex:1 1 0%;justify-content:safe center;padding-top:max(10vh,4rem);padding-bottom:4vh}
 #${HERO_ID}{display:flex;align-items:center;justify-content:center;gap:.875rem;max-width:min(100%,52rem);margin:0 auto 1.75rem;padding:0 1rem;text-align:center;user-select:none;animation:bb-hero-in 200ms ease-out both}
 #${HERO_ID} .bb-hero-icon{width:3.25rem;height:3.25rem;border-radius:.9rem;object-fit:cover;flex:none}
-#${HERO_ID} .bb-hero-greeting{position:relative;display:inline-block;font-size:clamp(24px,6vw,37px);line-height:1.15;opacity:.85;overflow-wrap:anywhere;min-width:0;white-space:pre-wrap}
-#${HERO_ID} .bb-hero-sizer{visibility:hidden}
-#${HERO_ID} .bb-hero-typed{position:absolute;inset:0;white-space:pre-wrap;overflow-wrap:anywhere;text-align:start}
+#${HERO_ID} .bb-hero-greeting{font-size:clamp(24px,6vw,37px);line-height:1.15;opacity:.85;overflow-wrap:anywhere;min-width:0}
 #${HERO_ID} .bb-hero-hello{font-family:Palatino,'Palatino Linotype',serif;font-style:italic}
 #${HERO_ID} .bb-hero-name{font-family:Georgia,serif;font-weight:400;font-variant:small-caps}
 @keyframes bb-hero-in{from{opacity:0}to{opacity:1}}
@@ -114,26 +112,13 @@ function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion })
   }
   const greeting = doc.createElement("div");
   greeting.className = "bb-hero-greeting";
-  // The sizer holds the complete string in flow so the icon and block never
-  // move while the typed copy grows on top of it.
-  const sizer = doc.createElement("span");
-  sizer.className = "bb-hero-sizer";
-  sizer.setAttribute("aria-hidden", "true");
-  const sizerHello = doc.createElement("span");
-  sizerHello.className = "bb-hero-hello";
-  sizerHello.textContent = helloText;
-  const sizerName = doc.createElement("span");
-  sizerName.className = "bb-hero-name";
-  sizerName.textContent = displayName;
-  sizer.append(sizerHello, sizerName);
-  const typed = doc.createElement("span");
-  typed.className = "bb-hero-typed";
+  // In-flow text: the centered flex row grows symmetrically as characters appear,
+  // so the greeting expands from its center and pushes the icon outward.
   const hello = doc.createElement("span");
   hello.className = "bb-hero-hello";
   const name = doc.createElement("span");
   name.className = "bb-hero-name";
-  typed.append(hello, name);
-  greeting.append(sizer, typed);
+  greeting.append(hello, name);
   hero.append(greeting);
 
   let painted = -1;
