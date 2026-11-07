@@ -4,8 +4,8 @@
 
 - The greeting now reserves its finished width before typing, so the icon and
   greeting stay put while characters appear.
-- A short opacity-only entrance leads the typing; the old horizontal slide and
-  the competing composer glide are gone.
+- A short opacity-only entrance leads the typing; the greeting no longer
+  re-centers character by character, and the separate composer glide is gone.
 - Text is written only when the character count changes, and reduced motion
   still renders the complete greeting immediately.
 
