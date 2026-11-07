@@ -15,7 +15,7 @@ const CSS = `
 #${HERO_ID} .bb-hero-icon{width:3.25rem;height:3.25rem;border-radius:.9rem;object-fit:cover;flex:none}
 #${HERO_ID} .bb-hero-greeting{position:relative;display:inline-block;font-size:clamp(24px,6vw,37px);line-height:1.15;opacity:.85;overflow-wrap:anywhere;min-width:0;white-space:pre-wrap}
 #${HERO_ID} .bb-hero-sizer{visibility:hidden}
-#${HERO_ID} .bb-hero-typed{position:absolute;inset:0;white-space:pre-wrap;overflow-wrap:anywhere}
+#${HERO_ID} .bb-hero-typed{position:absolute;inset:0;white-space:pre-wrap;overflow-wrap:anywhere;text-align:start}
 #${HERO_ID} .bb-hero-hello{font-family:Palatino,'Palatino Linotype',serif;font-style:italic}
 #${HERO_ID} .bb-hero-name{font-family:Georgia,serif;font-weight:400;font-variant:small-caps}
 @keyframes bb-hero-in{from{opacity:0}to{opacity:1}}
@@ -148,15 +148,16 @@ function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion })
     hello.textContent = helloText;
     name.textContent = full.slice(helloText.length, length);
   };
-  paint(reducedMotion ? full.length : 0);
+  const frame = view?.requestAnimationFrame?.bind(view);
+  const canAnimate = !reducedMotion && Boolean(frame) && full.length > 0;
+  paint(canAnimate ? 0 : full.length);
 
   column.prepend(hero);
   column.setAttribute(COLUMN_ATTR, "");
 
-  const frame = view?.requestAnimationFrame?.bind(view);
   let queued = 0;
   let disposed = false;
-  if (!reducedMotion && frame && full.length) {
+  if (canAnimate) {
     const started = Date.now() + TYPE_DELAY_MS;
     const tick = () => {
       if (disposed) return;

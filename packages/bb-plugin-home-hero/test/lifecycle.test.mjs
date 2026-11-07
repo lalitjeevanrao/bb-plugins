@@ -28,7 +28,7 @@ test("renders one hero above the composer column", () => {
   assert.equal(heroes[0].parentElement, column);
   assert.equal(column.firstElementChild, heroes[0]);
   assert.ok(column.hasAttribute("data-bb-hero-column"));
-  assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning");
+  assert.equal(doc.querySelector(".bb-hero-typed").textContent, "Morning");
   assert.match(doc.getElementById("bb-hero-style").textContent, /prefers-reduced-motion/);
 });
 
@@ -52,15 +52,15 @@ test("finds the compact homepage column on narrow viewports", () => {
 test("greets with the configured name", () => {
   const doc = page();
   applyHero(doc, { hours: 14, displayName: "Alex" });
-  assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Afternoon, Alex");
-  assert.equal(doc.querySelector(".bb-hero-name").textContent, "Alex");
-  assert.equal(doc.querySelector(".bb-hero-hello").textContent, "Afternoon, ");
+  assert.equal(doc.querySelector(".bb-hero-typed").textContent, "Afternoon, Alex");
+  assert.equal(doc.querySelector(".bb-hero-typed .bb-hero-name").textContent, "Alex");
+  assert.equal(doc.querySelector(".bb-hero-typed .bb-hero-hello").textContent, "Afternoon, ");
 });
 
 test("treats the name as text, never markup", () => {
   const doc = page();
   applyHero(doc, { hours: 9, displayName: "<b>Alex</b>" });
-  const name = doc.querySelector(".bb-hero-name");
+  const name = doc.querySelector(".bb-hero-typed .bb-hero-name");
   assert.equal(name.textContent, "<b>Alex</b>");
   assert.equal(name.querySelector("b"), null);
 });
@@ -80,7 +80,7 @@ test("re-applying keeps a single hero", () => {
   applyHero(doc, { hours: 9, displayName: "Alex" });
   applyHero(doc, { hours: 18, displayName: "Sam" });
   assert.equal(doc.querySelectorAll(`#${HERO_ID}`).length, 1);
-  assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Evening, Sam");
+  assert.equal(doc.querySelector(".bb-hero-typed").textContent, "Evening, Sam");
 });
 
 test("the hero survives until the last mounted owner unmounts", () => {
@@ -88,10 +88,10 @@ test("the hero survives until the last mounted owner unmounts", () => {
   const first = applyHero(doc, { hours: 9, displayName: "Alex" });
   const second = applyHero(doc, { hours: 9, displayName: "Sam" });
   assert.equal(doc.querySelectorAll(`#${HERO_ID}`).length, 1);
-  assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning, Sam");
+  assert.equal(doc.querySelector(".bb-hero-typed").textContent, "Morning, Sam");
   second();
   assert.equal(doc.querySelectorAll(`#${HERO_ID}`).length, 1);
-  assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning, Sam");
+  assert.equal(doc.querySelector(".bb-hero-typed").textContent, "Morning, Sam");
   first();
   assert.equal(doc.getElementById(HERO_ID), null);
   assert.equal(doc.querySelector("[data-bb-hero-column]"), null);
@@ -111,6 +111,19 @@ test("reduced motion shows the full greeting immediately", () => {
   applyHero(doc, { hours: 9, displayName: "Alex", reducedMotion: true });
   assert.equal(doc.querySelector(".bb-hero-sizer").textContent, "Morning, Alex");
   assert.equal(doc.querySelector(".bb-hero-typed").textContent, "Morning, Alex");
+});
+
+test("renders the full greeting when requestAnimationFrame is unavailable", () => {
+  const doc = page();
+  const view = doc.defaultView;
+  const realRaf = view.requestAnimationFrame;
+  view.requestAnimationFrame = undefined;
+  try {
+    applyHero(doc, { hours: 9, displayName: "Alex" });
+    assert.equal(doc.querySelector(".bb-hero-typed").textContent, "Morning, Alex");
+  } finally {
+    view.requestAnimationFrame = realRaf;
+  }
 });
 
 test("typing reserves the final width and writes only on character change", async () => {
@@ -134,6 +147,7 @@ test("typing reserves the final width and writes only on character change", asyn
     assert.equal(greeting.lastElementChild, typed);
     assert.equal(typed.textContent, "");
     assert.equal(view.getComputedStyle(typed).position, "absolute");
+    assert.equal(view.getComputedStyle(typed).textAlign, "start");
     assert.equal(view.getComputedStyle(sizer).visibility, "hidden");
 
     const writes = [];
