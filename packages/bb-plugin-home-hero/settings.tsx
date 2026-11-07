@@ -95,7 +95,7 @@ export function SettingsSection() {
   return (
     <div className="bb-hero-settings">
       <p>
-        Upload a PNG, JPEG or WebP image up to 256 KiB. It is stored with this plugin on your machine
+        Upload a PNG, JPEG or WebP image up to 256 KiB. BB sends it over its existing connection and stores it with this plugin on the BB server machine
         and never committed to the repository. Leave it blank to show the greeting without an icon.
       </p>
       {iconDataUrl ? (

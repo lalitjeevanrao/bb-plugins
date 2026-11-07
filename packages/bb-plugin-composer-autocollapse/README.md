@@ -38,7 +38,7 @@ Changes apply to the open page without a reload; the plugin polls its own settin
 
 ## Privacy
 
-The plugin has no network calls beyond BB's own plugin RPC. It reads focus, visibility and the draft's text length inside the page and stores only the six settings above. No prompts, drafts or usage data leave the page.
+The plugin makes no network calls beyond BB's own plugin RPC to its server. It reads focus, visibility and the draft's text length inside the page and stores only the six settings above. No prompts, drafts or usage data are sent to a third party.
 
 ## Compatibility and limits
 

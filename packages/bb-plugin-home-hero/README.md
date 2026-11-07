@@ -26,7 +26,7 @@ From a clone: `bb plugin install .` inside this directory.
 
 ## Privacy
 
-The icon never enters the repository and is never uploaded anywhere: it lives in BB's plugin data directory (`plugins/home-hero/data.db`) on this machine. The plugin has no network calls and collects no usage data. Uploaded images are checked by content, not only by file extension.
+The icon never enters this repository. Uploading sends the file over BB's existing browser–server connection to the BB server that runs the plugin, which stores it in plugin-managed storage (`plugins/home-hero/data.db`) on the server machine. There is no third-party upload service, no analytics and no usage reporting. Uploaded images are checked by content, not only by file extension.
 
 ## Compatibility and limits
 

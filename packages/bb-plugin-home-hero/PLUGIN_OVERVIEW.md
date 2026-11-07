@@ -17,7 +17,7 @@ People who spend the day in BB and want the home screen to feel like theirs, wit
 
 ## What it does not do
 
-- No default artwork, no analytics, no network requests.
+- No default artwork, no analytics, no third-party requests.
 - It does not touch BB's global branding or other pages.
 - It does not resize or reformat the composer itself.
 
@@ -27,4 +27,4 @@ BB 0.49.0+ (plugin SDK 0.6.132+), Node 22.19+ for development. The hero attaches
 
 ## Privacy
 
-The icon is stored in BB's private plugin storage on the local machine. Greeting text comes from plugin settings. Nothing is transmitted.
+The icon is sent over BB's existing connection to the BB server and stored in plugin-managed storage on the server machine. Greeting text comes from plugin settings. Nothing is sent to a third party.
