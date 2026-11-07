@@ -5,11 +5,30 @@ const PORTAL_SELECTOR = '[data-promptbox-typeahead-menu], [data-radix-popper-con
 const IDLE_SWEEP_MS = 5000;
 const SETTINGS_POLL_MS = 30_000;
 
-const isHidden = element => Boolean(element.closest('[hidden], [aria-hidden="true"]'));
+const isCssHidden = (node, view) => {
+  if (node.hasAttribute?.('hidden') || node.getAttribute?.('aria-hidden') === 'true') return true;
+  const style = view?.getComputedStyle?.(node);
+  return style?.display === 'none' || style?.visibility === 'hidden';
+};
 
-/** The prompt box that owns a visible collapse control, or null when the composer is collapsed. */
-export function expandedComposer(doc = globalThis.document) {
-  const control = Array.from(doc.querySelectorAll('[aria-label="Collapse prompt box"]')).find(button => !isHidden(button));
+/**
+ * Rendered visibility for a control: no hidden ancestor and real layout.
+ * `hasLayout` is the seam JSDOM tests replace, because JSDOM never lays out.
+ * @param {Document} doc
+ * @param {(element: Element) => boolean} [hasLayout]
+ * @returns {(element: Element) => boolean}
+ */
+export function visibleIn(doc, hasLayout = element => element.offsetParent !== null) {
+  const view = doc.defaultView;
+  return element => {
+    for (let node = element; node; node = node.parentElement) if (isCssHidden(node, view)) return false;
+    return hasLayout(element);
+  };
+}
+
+/** The prompt box that owns a visibly rendered collapse control, or null when the composer is collapsed. */
+export function expandedComposer(doc = globalThis.document, isVisible = visibleIn(doc)) {
+  const control = Array.from(doc.querySelectorAll('[aria-label="Collapse prompt box"]')).find(isVisible);
   return control?.closest('[class*="group/promptbox"]') ?? null;
 }
 
@@ -26,11 +45,12 @@ let activeDispose = null;
  * Collapse the BB composer when focus leaves it or it sits idle, with the
  * user's saved thresholds. Returns a disposer that removes every listener and
  * timer; a second mount replaces the first.
- * @param {{signal?: AbortSignal, document?: Document, fetchSettings?: () => Promise<unknown>, initialSettings?: unknown}} [options]
+ * @param {{signal?: AbortSignal, document?: Document, fetchSettings?: () => Promise<unknown>, initialSettings?: unknown, hasLayout?: (element: Element) => boolean}} [options]
  * @returns {() => void}
  */
-export function mountComposerAutocollapse({ signal, document: doc = globalThis.document, fetchSettings = fetchKnobs, initialSettings = null } = {}) {
+export function mountComposerAutocollapse({ signal, document: doc = globalThis.document, fetchSettings = fetchKnobs, initialSettings = null, hasLayout } = {}) {
   activeDispose?.();
+  const isVisible = visibleIn(doc, hasLayout);
 
   let knobs = normalizeKnobs(initialSettings);
   let disposed = false;
@@ -54,9 +74,9 @@ export function mountComposerAutocollapse({ signal, document: doc = globalThis.d
   };
 
   const onFocusOut = () => {
-    if (!expandedComposer(doc)) return;
+    if (!expandedComposer(doc, isVisible)) return;
     later(() => {
-      const root = expandedComposer(doc);
+      const root = expandedComposer(doc, isVisible);
       if (!root) return;
       const active = doc.activeElement;
       if (shouldCollapseOnFocusOut({
@@ -68,7 +88,7 @@ export function mountComposerAutocollapse({ signal, document: doc = globalThis.d
   };
   const onActivity = () => { lastInput = Date.now(); };
   const sweep = () => {
-    const root = expandedComposer(doc);
+    const root = expandedComposer(doc, isVisible);
     if (root && collapseIfIdle(root, doc.activeElement)) collapse(root);
   };
   const applySettings = value => { if (value) knobs = normalizeKnobs(value); };

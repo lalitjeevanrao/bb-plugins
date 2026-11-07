@@ -11,13 +11,24 @@ The current release is v0.3.1 (follows the v0.3.0 breaking canonical plugin ID r
 
 ## Publish the Git release
 
-Destination: public `lalitjeevanrao/copilot-session-credits`; root Pi package and `packages/bb-plugin-copilot-session-credits` share v0.3.1. Leave npm `private: true`; no npm/PyPI publication is needed.
+Destination: public `lalitjeevanrao/bb-plugins` (renamed from `copilot-session-credits`; old URLs redirect); root Pi package and `packages/bb-plugin-copilot-session-credits` share v0.3.1. Credits keep the unprefixed `vX.Y.Z` tags, so existing pinned sources keep resolving to the same commits after the repository rename. Leave npm `private: true`; no npm/PyPI publication is needed.
 
 Release from `main`, which contains the public history. Never merge or push the private `implementation/monorepo` branch: it contains historical screenshots excluded from publication. Exclude dependencies, build output and local review artifacts.
 
 Before a future release mutation, show the exact authenticated account, destination, release SHA, package/version, immutable tag and remote commands as required by BB Guide's submit-a-plugin release checkpoint. Publish only the reviewed source; never retag a release. Enable private vulnerability reporting.
 
 After publication, verify public access, CI and fresh installation from both commands in README. A pinned source does not follow new versions automatically.
+
+## Collection releases
+
+The repository hosts three plugins. Each package stands alone with its own lockfile, tests and version; the root `package.json` only coordinates checks and carries the credits/Pi version.
+
+1. Rename and push in this order: rename the GitHub repository, update `origin`, confirm both the old and new URLs resolve the recorded credits tags to their existing commits, push the reviewed branch, open the PR, merge after CI, then tag.
+2. Credits releases keep unprefixed tags: `v0.3.1`, `v0.3.2`, and the root Pi package always matches the credits package version. The collection check in `test/collection-test.mjs` fails when they drift.
+3. Home Hero and Composer Auto-collapse use prefixed tags: `home-hero/v0.1.0`, `composer-autocollapse/v0.1.0`. Bump only the package that changed. A prefixed tag must never be parsed as a credits version.
+4. Both new plugins require BB 0.49.0+ and plugin SDK 0.6.132+; the collection check asserts those floors and CI installs `bb-app@0.49.0` so the claim stays tested.
+5. Verify each tag from a clean machine: `bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@home-hero/v0.1.0 --plugin home-hero` (and the matching command for each other plugin), then confirm the plugin builds, loads and its settings page opens.
+6. Release notes describe the plugin that changed. Do not retag a release; publish a new patch instead.
 
 ## Submit to BB Community
 

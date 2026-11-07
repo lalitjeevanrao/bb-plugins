@@ -101,8 +101,8 @@ export function SettingsSection() {
       {iconDataUrl ? (
         <img className="bb-hero-icon" alt="" src={iconDataUrl} width={52} height={52} />
       ) : null}
-      <div className="bb-hero-actions">
-        <label>
+      <div className="bb-hero-actions" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", marginTop: "0.75rem" }}>
+        <label style={{ cursor: busy ? "default" : "pointer", fontWeight: 600, border: "1px solid currentColor", borderRadius: "0.5rem", padding: "0.25rem 0.75rem", opacity: busy ? 0.6 : 1 }}>
           {iconDataUrl ? "Replace icon" : "Upload icon"}
           <input
             accept="image/png,image/jpeg,image/webp"
@@ -111,6 +111,7 @@ export function SettingsSection() {
               void upload(event.target.files?.[0]);
               event.target.value = "";
             }}
+            style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
             type="file"
           />
         </label>

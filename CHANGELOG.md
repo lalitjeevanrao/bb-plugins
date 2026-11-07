@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — bb-plugins collection
+
+- The repository now hosts three independently released BB plugins: Copilot session credits, Home Hero and Composer Auto-collapse.
+- Home Hero: greeting with an optional name and a validated icon upload.
+- Composer Auto-collapse: focus-out and idle collapse that keeps drafts.
+- Credits keep their unprefixed tags; the new plugins use `home-hero/` and `composer-autocollapse/` tag prefixes.
+
 ## [0.3.1] — 2026-11-07
 
 - Keep recorded usage status independent from Pi collector readiness and BB connection state.

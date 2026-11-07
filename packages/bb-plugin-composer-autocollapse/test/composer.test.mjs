@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { DEFAULT_KNOBS, normalizeKnobs, shouldCollapseOnFocusOut, shouldCollapseWhenIdle } from '../policy.mjs';
-import { expandedComposer, mountComposerAutocollapse } from '../mount.mjs';
+import { expandedComposer, mountComposerAutocollapse, visibleIn } from '../mount.mjs';
 
 const cases = [];
 const test = (name, fn) => cases.push([name, fn]);
@@ -25,10 +25,13 @@ const dom = ({ draft = '', portal = false, collapseButton = true } = {}) => {
   return page.window;
 };
 
+// jsdom never lays out, so tests supply the layout half of rendered visibility.
+const layout = () => true;
 const mount = (window, settings, extra = {}) => mountComposerAutocollapse({
   document: window.document,
   fetchSettings: async () => settings,
   initialSettings: settings,
+  hasLayout: layout,
   ...extra,
 });
 
@@ -64,10 +67,45 @@ test('policy: idle collapse honours the empty-draft and hidden-tab conditions', 
 
 test('expandedComposer finds the prompt box that owns the collapse control', () => {
   const window = dom();
-  const root = expandedComposer(window.document);
+  const isVisible = visibleIn(window.document, layout);
+  const root = expandedComposer(window.document, isVisible);
   assert.equal(root?.className, 'group/promptbox');
   const collapsed = dom({ collapseButton: false }).document;
-  assert.equal(expandedComposer(collapsed), null);
+  assert.equal(expandedComposer(collapsed, visibleIn(collapsed, layout)), null);
+});
+
+test('visibleIn rejects CSS-hidden and display:none trees', () => {
+  const window = new JSDOM(`<!doctype html><html><head><style>.desktop-only{display:none}</style></head><body>
+    <div class="desktop-only"><button aria-label="Collapse prompt box">hidden</button></div>
+    <div><button aria-label="Collapse prompt box" id="visible">visible</button></div>
+  </body></html>`).window;
+  const isVisible = visibleIn(window.document, layout);
+  assert.equal(isVisible(window.document.querySelector('.desktop-only button')), false);
+  assert.equal(isVisible(window.document.querySelector('#visible')), true);
+});
+
+test('mount: a CSS-hidden first composer is skipped and the visible one collapses', async () => {
+  const window = new JSDOM(`<!doctype html><html><head><style>.desktop-only{display:none}</style></head><body>
+    <div class="desktop-only"><div class="group/promptbox" id="hidden-tree">
+      <button aria-label="Collapse prompt box" id="hidden-collapse">collapse</button>
+    </div></div>
+    <div><div class="group/promptbox" id="visible-tree">
+      <button aria-label="Collapse prompt box" id="visible-collapse">collapse</button>
+      <div contenteditable="true" id="visible-editor"></div>
+    </div></div>
+    <input id="outside" />
+  </body></html>`).window;
+  let hiddenClicks = 0;
+  let visibleClicks = 0;
+  window.document.querySelector('#hidden-collapse').addEventListener('click', () => { hiddenClicks += 1; });
+  window.document.querySelector('#visible-collapse').addEventListener('click', () => { visibleClicks += 1; });
+  window.document.querySelector('#visible-editor').focus();
+  const dispose = mount(window, knobs());
+  focusOut(window);
+  await settle();
+  assert.equal(hiddenClicks, 0, 'the hidden desktop tree stays alone');
+  assert.equal(visibleClicks, 1, 'the visible composer receives the collapse');
+  dispose();
 });
 
 test('mount: focus leaving the composer collapses once', async () => {

@@ -19,7 +19,7 @@
     "test:plugin": "npm --prefix packages/bb-plugin-copilot-session-credits test",
     "test:collector": "node packages/bb-plugin-copilot-session-credits/collector/test/test.mjs && node packages/bb-plugin-copilot-session-credits/collector/test/regression-test.mjs && node packages/bb-plugin-copilot-session-credits/collector/test/sdk-test.mjs && node packages/bb-plugin-copilot-session-credits/collector/test/readiness-test.mjs",
     "test": "npm run test:plugin && npm run test:collector && npm run test:packages",
-    "test:collection": "node test/collection-test.mjs",
+    "test:collection": "node test/collection-test.mjs && node test/collection-tags-test.mjs",
     "typecheck": "npm --prefix packages/bb-plugin-copilot-session-credits run typecheck",
     "build": "npm --prefix packages/bb-plugin-copilot-session-credits run build",
     "check:home-hero": "npm --prefix packages/bb-plugin-home-hero run typecheck && npm --prefix packages/bb-plugin-home-hero test && npm --prefix packages/bb-plugin-home-hero run build",
