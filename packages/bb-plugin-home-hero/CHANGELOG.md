@@ -2,12 +2,12 @@
 
 ## 0.1.1
 
-- The greeting now reserves its finished width before typing, so the icon and
+- The greeting reserves its finished width before typing, so the icon and
   greeting stay put while characters appear.
-- A short opacity-only entrance leads the typing; the greeting no longer
-  re-centers character by character, and the separate composer glide is gone.
-- Text is written only when the character count changes, and reduced motion
-  still renders the complete greeting immediately.
+- The opacity entrance finishes before typing starts, and text is written only
+  when the character count changes.
+- When animation frames are unavailable, the complete greeting is shown, and
+  reduced motion still renders it immediately.
 
 ## 0.1.0
 - First public release in the `bb-plugins` collection.
