@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRpc } from "@get-bb/plugin-sdk/app";
 import { MAX_ICON_BYTES, validateIconDataUrl } from "./appearance.ts";
 import { rpcContract } from "./contract.ts";
@@ -38,11 +38,18 @@ function readFile(file: File): Promise<string> {
   });
 }
 
+const BUTTON_CLASS =
+  "inline-flex h-7 items-center justify-center rounded-md border border-input bg-transparent px-2.5 text-xs font-medium text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+const QUIET_BUTTON_CLASS =
+  "inline-flex h-7 items-center justify-center rounded-md px-2.5 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+
 export function SettingsSection() {
   const rpc = useRpc<typeof rpcContract>();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [iconDataUrl, setIconDataUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [busy, setBusy] = useState(false);
+
   useEffect(() => {
     let live = true;
     rpc
@@ -58,13 +65,20 @@ export function SettingsSection() {
     };
   }, [rpc]);
 
-  const save = async (value: string | null) => {
+  const persist = async (value: string | null) => {
+    const appearance = await rpc.call("setIcon", { iconDataUrl: value });
+    setIconDataUrl(appearance.iconDataUrl);
+    setStatus({ kind: "saved" });
+  };
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
     setBusy(true);
     setStatus({ kind: "saving" });
     try {
-      const appearance = await rpc.call("setIcon", { iconDataUrl: value });
-      setIconDataUrl(appearance.iconDataUrl);
-      setStatus({ kind: "saved" });
+      if (file.size > MAX_ICON_BYTES) throw new Error("Icon must be 256 KiB or smaller.");
+      await ensureDecodable(file);
+      await persist(validateIconDataUrl(await readFile(file)));
     } catch (error) {
       setStatus({
         kind: "error",
@@ -75,60 +89,80 @@ export function SettingsSection() {
     }
   };
 
-  const upload = async (file: File | undefined) => {
-    if (!file) return;
-    if (file.size > MAX_ICON_BYTES) {
-      setStatus({ kind: "error", message: "Icon must be 256 KiB or smaller." });
-      return;
-    }
+  const remove = async () => {
+    setBusy(true);
+    setStatus({ kind: "saving" });
     try {
-      await ensureDecodable(file);
-      await save(validateIconDataUrl(await readFile(file)));
+      await persist(null);
     } catch (error) {
       setStatus({
         kind: "error",
-        message: error instanceof Error ? error.message : "Could not save the icon.",
+        message: error instanceof Error ? error.message : "Could not remove the icon.",
       });
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <div className="bb-hero-settings">
-      <p>
-        Upload a PNG, JPEG or WebP image up to 256 KiB. BB sends it over its existing connection and stores it with this plugin on the BB server machine
-        and never committed to the repository. Leave it blank to show the greeting without an icon.
-      </p>
-      {iconDataUrl ? (
-        <img className="bb-hero-icon" alt="" src={iconDataUrl} width={52} height={52} />
-      ) : null}
-      <div className="bb-hero-actions" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", marginTop: "0.75rem" }}>
-        <label style={{ cursor: busy ? "default" : "pointer", fontWeight: 600, border: "1px solid currentColor", borderRadius: "0.5rem", padding: "0.25rem 0.75rem", opacity: busy ? 0.6 : 1 }}>
-          {iconDataUrl ? "Replace icon" : "Upload icon"}
+    <div
+      className="@container/settings w-full min-w-0 overflow-hidden rounded-md border border-border bg-surface-recessed/70 px-3 py-3"
+      data-settings-anchor="Home hero icon"
+    >
+      <div className="flex flex-col gap-2.5 @min-[36rem]/settings:flex-row @min-[36rem]/settings:items-start @min-[36rem]/settings:justify-between @min-[36rem]/settings:gap-5">
+        <div className="min-w-0 flex-1">
+          <p className="min-w-0 text-sm font-normal text-foreground">Home hero icon</p>
+          <p className="mt-0.5 text-xs leading-snug text-subtle-foreground/75">PNG, JPEG or WebP up to 256 KiB.</p>
+          <p className="text-xs leading-snug text-subtle-foreground/75">Stored with this plugin on the BB server; never committed to the repository.</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {iconDataUrl ? (
+            <img
+              alt=""
+              className="h-10 w-10 rounded-md border border-border object-cover"
+              height={40}
+              src={iconDataUrl}
+              width={40}
+            />
+          ) : null}
           <input
             accept="image/png,image/jpeg,image/webp"
+            aria-label="Home hero icon file"
+            className="sr-only"
+            tabIndex={-1}
             disabled={busy}
             onChange={event => {
               void upload(event.target.files?.[0]);
               event.target.value = "";
             }}
-            style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+            ref={inputRef}
             type="file"
           />
-        </label>
-        {iconDataUrl ? (
-          <button disabled={busy} onClick={() => void save(null)} type="button">
-            Remove icon
+          <button
+            className={BUTTON_CLASS}
+            disabled={busy}
+            onClick={() => inputRef.current?.click()}
+            type="button"
+          >
+            {iconDataUrl ? "Replace icon" : "Upload icon"}
           </button>
-        ) : null}
+          {iconDataUrl ? (
+            <button className={QUIET_BUTTON_CLASS} disabled={busy} onClick={() => void remove()} type="button">
+              Remove
+            </button>
+          ) : null}
+        </div>
       </div>
-      <p aria-live="polite" role="status">
-        {status.kind === "saving"
-          ? "Saving…"
-          : status.kind === "saved"
-            ? "Icon saved."
-            : status.kind === "error"
-              ? status.message
-              : ""}
+      <p
+        aria-live="polite"
+        className={
+          status.kind === "idle"
+            ? "h-0 overflow-hidden text-xs"
+            : `mt-2 text-xs leading-snug ${status.kind === "error" ? "text-destructive" : "text-subtle-foreground/75"}`
+        }
+        role="status"
+      >
+        {status.kind === "saving" ? "Saving…" : status.kind === "saved" ? "Icon saved." : status.kind === "error" ? status.message : ""}
       </p>
     </div>
   );
