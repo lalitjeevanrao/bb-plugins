@@ -1,11 +1,19 @@
 {
   "$schema": "https://getbb.app/schemas/plugins.schema.json",
   "schemaVersion": 1,
-  "name": "copilot-session-credits",
+  "name": "bb-plugins",
   "plugins": [
     {
       "name": "copilot-session-credits",
       "source": "./packages/bb-plugin-copilot-session-credits"
+    },
+    {
+      "name": "home-hero",
+      "source": "./packages/bb-plugin-home-hero"
+    },
+    {
+      "name": "composer-autocollapse",
+      "source": "./packages/bb-plugin-composer-autocollapse"
     }
   ]
 }
