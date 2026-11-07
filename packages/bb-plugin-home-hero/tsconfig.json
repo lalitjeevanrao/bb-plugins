@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
+    "noEmit": true,
+    "skipLibCheck": false,
+    "allowJs": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "app.tsx",
+    "appearance.ts",
+    "contract.ts",
+    "greeting.ts",
+    "hero-mount.mjs",
+    "hero.mjs",
+    "server.ts",
+    "settings.tsx"
+  ]
+}

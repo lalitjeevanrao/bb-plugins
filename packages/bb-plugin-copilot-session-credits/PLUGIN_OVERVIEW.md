@@ -18,6 +18,6 @@ These are reported session credits, not a remaining subscription balance or invo
 
 Pi receipts stay on the execution host and contain usage amounts and identifiers, not prompts, responses or credentials. The plugin adds no analytics endpoint. Removing it preserves receipts; the receipt folder has a 256-entry limit.
 
-[Installation and screenshots](https://github.com/lalitjeevanrao/copilot-session-credits#readme) · [Security](https://github.com/lalitjeevanrao/copilot-session-credits/blob/main/SECURITY.md) · [Receipt cleanup](https://github.com/lalitjeevanrao/copilot-session-credits/blob/main/docs/cleanup.md)
+[Installation and screenshots](https://github.com/lalitjeevanrao/bb-plugins#readme) · [Security](https://github.com/lalitjeevanrao/bb-plugins/blob/main/SECURITY.md) · [Receipt cleanup](https://github.com/lalitjeevanrao/bb-plugins/blob/main/docs/cleanup.md)
 
 Version 0.3.0 uses the BB ID `copilot-session-credits`. Remove the old BB plugin ID before upgrading, and replace the existing Pi source rather than installing a second companion. Legacy receipts remain readable without moving them.

@@ -30,7 +30,7 @@ if (!process.argv.includes('--isolated')) {
   const command=(...args)=>execFileSync(process.execPath,[cli,...args],{cwd:root,env,encoding:'utf8'});
   globalThis.fetch=async()=>{throw Error('Network forbidden');};
   command('install',source,'--approve');
-  assert(command('list').includes('copilot-session-credits'));
+  assert(command('list').includes('bb-plugins'));
   const settings=SettingsManager.create(root,agentDir);
   const load=async bb=>{
     process.env.BB_THREAD_ID=bb;

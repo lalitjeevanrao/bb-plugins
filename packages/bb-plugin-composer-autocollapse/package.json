@@ -1,0 +1,59 @@
+{
+  "name": "bb-plugin-composer-autocollapse",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "description": "BB plugin: collapse the composer when focus leaves it or it sits idle.",
+  "keywords": [
+    "bb-plugin",
+    "composer",
+    "ui"
+  ],
+  "engines": {
+    "bb": ">=0.49.0",
+    "node": ">=22.19.0",
+    "bbPluginSdk": ">=0.6.132"
+  },
+  "bb": {
+    "name": "Composer Auto-collapse",
+    "description": "Collapse the composer after focus leaves it or it sits idle, with configurable thresholds.",
+    "branding": {
+      "icon": "ChevronsDownUp"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx",
+    "skills": []
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "0.6.132",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "better-sqlite3": "^12.11.1",
+    "hono": "^4.13.17",
+    "jsdom": "^26.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "bb plugin build .",
+    "test": "node test/composer.test.mjs"
+  },
+  "author": "Lalit Rao",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lalitjeevanrao/bb-plugins.git",
+    "directory": "packages/bb-plugin-composer-autocollapse"
+  },
+  "homepage": "https://github.com/lalitjeevanrao/bb-plugins#readme",
+  "bugs": {
+    "url": "https://github.com/lalitjeevanrao/bb-plugins/issues"
+  }
+}
