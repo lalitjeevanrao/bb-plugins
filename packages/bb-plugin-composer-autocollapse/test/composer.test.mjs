@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { DEFAULT_KNOBS, normalizeKnobs, shouldCollapseOnFocusOut, shouldCollapseWhenIdle } from '../policy.mjs';
-import { expandedComposer, mountComposerAutocollapse, visibleIn } from '../mount.mjs';
+import { expandedComposer, fetchKnobs, mountComposerAutocollapse, visibleIn } from '../mount.mjs';
 
 const cases = [];
 const test = (name, fn) => cases.push([name, fn]);
@@ -193,6 +193,15 @@ test('mount: mounting twice keeps a single active instance', async () => {
   assert.equal(clicks, 1);
   first();
   second();
+});
+
+test('fetchKnobs unwraps the HTTP RPC envelope', async () => {
+  const knobs = await fetchKnobs(async () => ({
+    ok: true,
+    json: async () => ({ ok: true, result: { idleSeconds: 5, focusOutCollapse: false } }),
+  }));
+  assert.equal(knobs.idleSeconds, 5);
+  assert.equal(knobs.focusOutCollapse, false);
 });
 
 const results = [];

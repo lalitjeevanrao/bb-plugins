@@ -26,7 +26,7 @@ The repository hosts three plugins. Each package stands alone with its own lockf
 1. Rename and push in this order: rename the GitHub repository, update `origin`, confirm both the old and new URLs resolve the recorded credits tags to their existing commits, push the reviewed branch, open the PR, merge after CI, then tag.
 2. Credits releases keep unprefixed tags: `v0.3.1`, `v0.3.2`, and the root Pi package always matches the credits package version. The collection check in `test/collection-test.mjs` fails when they drift.
 3. Home Hero and Composer Auto-collapse use prefixed tags: `home-hero/v0.1.0`, `composer-autocollapse/v0.1.0`. Bump only the package that changed. A prefixed tag must never be parsed as a credits version.
-4. Both new plugins require BB 0.49.0+ and plugin SDK 0.6.132+; the collection check asserts those floors and CI installs `bb-app@0.49.0` so the claim stays tested.
+4. Both new plugins declare their BB and plugin SDK engines; the exact tested floors are recorded in each release receipt. The collection check only requires a valid version and declared engines, so a package can ship a patch release without touching the root test. CI installs the tested `bb-app` host (0.49.0 today), which keeps those floors exercised.
 5. Verify each tag from a clean machine: `bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@home-hero/v0.1.0 --plugin home-hero` (and the matching command for each other plugin), then confirm the plugin builds, loads and its settings page opens.
 6. Release notes describe the plugin that changed. Do not retag a release; publish a new patch instead.
 

@@ -1,17 +1,15 @@
 export const HERO_ID = "bb-hero";
 const STYLE_ID = "bb-hero-style";
 const COLUMN_ATTR = "data-bb-hero-column";
-const COLUMN_SELECTOR = ".flex > .relative > .\\@container\\/page > .mx-auto";
-const FALLBACK_SELECTOR = '[data-testid="root-compose-prompt"]';
-const FALLBACK_COLUMN = ".max-w-\\[760px\\]";
-// The host wraps a homepageSection in this container, heading included; the
-// hero lives in the composer column instead, so hide the empty slot.
-const SECTION_ID = "plugin-homepage\\:home-hero\\:hero";
+// Only a real home composer target counts: the home tree exposes `root-compose-*`,
+// so a generic `.mx-auto` on another page can never host the hero.
+const HOME_SELECTOR = '[data-testid^="root-compose"]';
+const COMPOSER_SELECTOR = '[class*="group/promptbox"]';
+const COLUMN_ANCESTOR = '[class*="max-w-[760px]"]';
 const TYPE_MS = 850;
 
 const CSS = `
 [${COLUMN_ATTR}]{min-height:100%;flex:1 1 0%;justify-content:safe center;padding-top:max(10vh,4rem);padding-bottom:4vh}
-#${SECTION_ID}{display:none}
 #${HERO_ID}{display:flex;align-items:center;justify-content:center;gap:.875rem;max-width:min(100%,52rem);margin:0 auto 1.75rem;padding:0 1rem;text-align:center;user-select:none;animation:bb-hero-in 200ms ease-out both}
 #${HERO_ID} .bb-hero-icon{width:3.25rem;height:3.25rem;border-radius:.9rem;object-fit:cover;flex:none}
 #${HERO_ID} .bb-hero-greeting{font-size:clamp(24px,6vw,37px);line-height:1.15;opacity:.85;overflow-wrap:anywhere;min-width:0}
@@ -21,8 +19,25 @@ const CSS = `
 @media (prefers-reduced-motion: reduce){#${HERO_ID}{animation:none}}
 `;
 
+/** A desktop/compact duplicate tree can be CSS-hidden; never target it. */
+export function isHiddenElement(node) {
+  const view = node?.ownerDocument?.defaultView;
+  for (let current = node; current; current = current.parentElement) {
+    if (current.hasAttribute?.("hidden") || current.getAttribute?.("aria-hidden") === "true") return true;
+    const style = view?.getComputedStyle?.(current);
+    if (style && (style.display === "none" || style.visibility === "hidden")) return true;
+  }
+  return false;
+}
+
 export function findColumn(doc = globalThis.document) {
-  return doc.querySelector(COLUMN_SELECTOR) ?? doc.querySelector(FALLBACK_SELECTOR)?.closest(FALLBACK_COLUMN) ?? null;
+  for (const composer of doc.querySelectorAll(COMPOSER_SELECTOR)) {
+    // The home anchor keeps an unrelated page's composer or `.mx-auto` out.
+    if (!composer.closest(HOME_SELECTOR) || isHiddenElement(composer)) continue;
+    const column = composer.closest(COLUMN_ANCESTOR) ?? composer.closest(".mx-auto") ?? composer.parentElement;
+    if (column) return column;
+  }
+  return null;
 }
 
 /** One registry per document: owners counts live mounts so the hero outlives all but the last. */

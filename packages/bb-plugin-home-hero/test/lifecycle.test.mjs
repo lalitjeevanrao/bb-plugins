@@ -4,7 +4,9 @@ import { applyHero, findColumn, HERO_ID } from "../hero.mjs";
 
 const PAGE = `<body>
   <div class="flex"><div class="relative"><div class="@container/page">
-    <div class="mx-auto" id="column"></div>
+    <div class="mx-auto max-w-[760px] px-4" id="column">
+      <form class="group/promptbox" data-testid="root-compose-prompt"></form>
+    </div>
   </div></div></div>
 </body>`;
 
@@ -27,7 +29,24 @@ test("renders one hero above the composer column", () => {
   assert.equal(column.firstElementChild, heroes[0]);
   assert.ok(column.hasAttribute("data-bb-hero-column"));
   assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning");
-  assert.match(doc.getElementById("bb-hero-style").textContent, /plugin-homepage/);
+  assert.match(doc.getElementById("bb-hero-style").textContent, /prefers-reduced-motion/);
+});
+
+test("finds the compact homepage column on narrow viewports", () => {
+  const doc = page(`<body>
+    <div data-testid="root-compose-compact-home">
+      <div class="absolute inset-x-0 bottom-0 z-10" data-testid="root-compose-compact-composer">
+        <div class="mx-auto w-full max-w-[760px] px-4" id="compact-column">
+          <form class="group/promptbox" data-testid="root-compose-compact-input"></form>
+        </div>
+      </div>
+    </div>
+  </body>`);
+  assert.equal(findColumn(doc)?.id, "compact-column");
+  const dispose = applyHero(doc, { hours: 9, reducedMotion: true });
+  assert.equal(doc.querySelectorAll(`#${HERO_ID}`).length, 1);
+  assert.equal(doc.getElementById("compact-column").firstElementChild.id, HERO_ID);
+  dispose();
 });
 
 test("greets with the configured name", () => {
@@ -91,6 +110,38 @@ test("reduced motion shows the full greeting immediately", () => {
   const doc = page();
   applyHero(doc, { hours: 9, displayName: "Alex", reducedMotion: true });
   assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning, Alex");
+});
+
+test("skips a CSS-hidden home tree in favour of the visible one", () => {
+  const doc = page(`<body>
+    <div data-testid="root-compose-compact-home" style="display:none">
+      <div class="mx-auto w-full max-w-[760px]" id="hidden-column">
+        <form class="group/promptbox"></form>
+      </div>
+    </div>
+    <div data-testid="root-compose-compact-home">
+      <div class="mx-auto w-full max-w-[760px]" id="visible-column">
+        <form class="group/promptbox"></form>
+      </div>
+    </div>
+  </body>`);
+  assert.equal(findColumn(doc)?.id, "visible-column");
+  const dispose = applyHero(doc, { hours: 9, reducedMotion: true });
+  assert.equal(doc.querySelectorAll(`#${HERO_ID}`).length, 1);
+  assert.equal(doc.getElementById("visible-column").firstElementChild.id, HERO_ID);
+  assert.equal(doc.getElementById("hidden-column").firstElementChild.tagName, "FORM");
+  dispose();
+});
+
+test("ignores a generic mx-auto column with no home composer target", () => {
+  const doc = page(`<body><div class="flex"><div class="relative"><div class="@container/page">
+    <div class="mx-auto max-w-[760px]" id="other-column"></div>
+  </div></div></div></body>`);
+  assert.equal(findColumn(doc), null);
+  const dispose = applyHero(doc, { hours: 9 });
+  assert.equal(doc.querySelectorAll(`#${HERO_ID}`).length, 0);
+  assert.equal(doc.getElementById("bb-hero-style"), null);
+  dispose();
 });
 
 test("a page without a composer column is harmless", () => {

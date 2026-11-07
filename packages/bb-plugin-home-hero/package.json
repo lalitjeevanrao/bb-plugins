@@ -45,7 +45,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "bb plugin build .",
-    "test": "node test/appearance.test.mjs && node test/greeting.test.mjs && node test/lifecycle.test.mjs && node test/server.test.mjs"
+    "test": "node test/appearance.test.mjs && node test/greeting.test.mjs && node test/lifecycle.test.mjs && node test/mount.test.mjs && node test/server.test.mjs"
   },
   "author": "Lalit Rao",
   "repository": {

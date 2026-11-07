@@ -18,12 +18,13 @@
     "allowImportingTsExtensions": true
   },
   "include": [
-    "server.ts",
     "app.tsx",
-    "settings.tsx",
-    "contract.ts",
     "appearance.ts",
+    "contract.ts",
     "greeting.ts",
-    "hero.mjs"
+    "hero-mount.mjs",
+    "hero.mjs",
+    "server.ts",
+    "settings.tsx"
   ]
 }

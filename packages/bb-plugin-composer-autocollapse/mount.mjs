@@ -32,11 +32,14 @@ export function expandedComposer(doc = globalThis.document, isVisible = visibleI
   return control?.closest('[class*="group/promptbox"]') ?? null;
 }
 
-async function fetchKnobs(fetchImpl = globalThis.fetch) {
+export async function fetchKnobs(fetchImpl = globalThis.fetch) {
   if (!fetchImpl) return null;
   const response = await fetchImpl(SETTINGS_PATH, { method: 'POST', headers: { 'content-type': 'application/json' }, body: 'null' });
   if (!response.ok) throw new Error(`settings request failed: ${response.status}`);
-  return response.json();
+  const payload = await response.json();
+  // The HTTP endpoint wraps results; returning the envelope would silently fall
+  // back to defaults, so unwrap the same way the in-app RPC client does.
+  return payload?.result ?? payload;
 }
 
 let activeDispose = null;
