@@ -7,7 +7,14 @@ import { hostContract, emptyUsage, readinessSchema, type Usage } from "./contrac
 import { readReadiness } from "./collector/readiness.mjs";
 import { piUsage, cliUsage } from "./accounting.mjs";
 
-const defaultPiRoots = [join(homedir(), ".pi", "agent", "session-credits")];
+const defaultPiRoots = [
+  join(homedir(), ".pi", "agent", "copilot-session-credits"),
+  join(homedir(), ".pi", "agent", "session-credits"), // Read-only compatibility with pre-0.3 receipts.
+];
+const defaultStatusRoots = [
+  join(homedir(), ".pi", "agent", "copilot-session-credits-status"),
+  join(homedir(), ".pi", "agent", "session-credits-status"), // Read-only compatibility with pre-0.3 startup status.
+];
 const uuidFile = /^[a-f0-9-]{36}\.jsonl$/i;
 async function safeFile(path: string, limit: number, { tail = false, head = false, privateMode = false }: { tail?: boolean; head?: boolean; privateMode?: boolean } = {}) {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -101,7 +108,7 @@ async function readCli(sessionId: string, root: string) {
   }
   return cliUsage(latest);
 }
-export function createHostEntry(piRoots = defaultPiRoots, cliRoot = join(homedir(), ".copilot", "session-state"), statusRoot = join(homedir(), ".pi", "agent", "session-credits-status")) {
+export function createHostEntry(piRoots = defaultPiRoots, cliRoot = join(homedir(), ".copilot", "session-state"), statusRoot: string | string[] = defaultStatusRoots) {
 const cache = new Map<string, { at: number; value: Promise<any> }>();
 return experimental_defineHostEntry({
   contract: hostContract,

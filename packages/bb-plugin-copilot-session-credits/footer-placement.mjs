@@ -19,9 +19,9 @@ export function attachCreditTarget(anchor, change) {
     }
     if (!host) {
       host = anchor.ownerDocument.createElement('span');
-      host.setAttribute('data-session-credit-info', '');
+      host.setAttribute('data-copilot-session-credit-info', '');
       host.setAttribute('data-bb-plugin-root', '');
-      host.setAttribute('data-bb-plugin', 'session-credits');
+      host.setAttribute('data-bb-plugin', 'copilot-session-credits');
       host.style.display = 'contents';
     }
     if (host.parentNode !== group || host.nextSibling !== button)

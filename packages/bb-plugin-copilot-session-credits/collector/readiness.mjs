@@ -36,17 +36,24 @@ export function readReadiness(directory, providerSession) {
   const unknown = reason => ({ state: 'unconfirmed', runtimeVersion: null, reason });
   if (!SESSION.test(providerSession)) return unknown('Provider session identity is unavailable.');
   try {
-    safeDirectory(directory);
-    const sessionDirectory = join(directory, providerSession); safeDirectory(sessionDirectory);
-    const names = [], dir = opendirSync(sessionDirectory);
-    try { let entry; while (names.length <= 16 && (entry = dir.readSync())) names.push(entry.name); } finally { dir.closeSync(); }
-    if (names.length > 16) return unknown('Too many readiness records; capture is unconfirmed.');
-    const candidates = names.filter(name => UUID.test(name.slice(0, -5)) && name.endsWith('.json'));
-    if (candidates.length > 8) return unknown('Too many readiness instances; capture is unconfirmed.');
     const live = [];
-    for (const name of candidates) {
-      const marker = readMarker(join(sessionDirectory, name), providerSession).value;
-      try { process.kill(marker.pid, 0); live.push(marker); } catch {}
+    let candidateCount = 0;
+    for (const root of Array.isArray(directory) ? directory : [directory]) {
+      let names;
+      const sessionDirectory = join(root, providerSession);
+      try {
+        safeDirectory(root); safeDirectory(sessionDirectory);
+        names = []; const dir = opendirSync(sessionDirectory);
+        try { let entry; while (names.length <= 16 && (entry = dir.readSync())) names.push(entry.name); } finally { dir.closeSync(); }
+      } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+      if (names.length > 16) return unknown('Too many readiness records; capture is unconfirmed.');
+      const candidates = names.filter(name => UUID.test(name.slice(0, -5)) && name.endsWith('.json'));
+      candidateCount += candidates.length;
+      if (candidateCount > 8) return unknown('Too many readiness instances; capture is unconfirmed.');
+      for (const name of candidates) {
+        const marker = readMarker(join(sessionDirectory, name), providerSession).value;
+        try { process.kill(marker.pid, 0); live.push(marker); } catch {}
+      }
     }
     if (live.length !== 1) return unknown(live.length > 1 ? 'Multiple live collector instances; capture is ambiguous.' : 'No live collector startup record for this session.');
     const value = live[0];

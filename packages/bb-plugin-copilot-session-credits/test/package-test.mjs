@@ -18,12 +18,12 @@ if (!process.argv.includes('--isolated')) {
   const {DefaultResourceLoader,SettingsManager}=await import(pathToFileURL(join(runtime.root,'dist/index.js')));
   const {parseGitUrl}=await import(pathToFileURL(join(runtime.root,'dist/utils/git.js')));
   const source=piInstallCommand.slice('pi install '.length),parsed=parseGitUrl(source);
-  assert.equal(parsed.ref,'v0.2.2');assert.equal(parsed.host,'github.com');
-  const fixture=join(root,'git source'),prefix=join(fixture,'packages/bb-plugin-session-credits');mkdirSync(prefix,{recursive:true});
+  assert.equal(parsed.ref,'v0.3.0');assert.equal(parsed.host,'github.com');
+  const fixture=join(root,'git source'),prefix=join(fixture,'packages/bb-plugin-copilot-session-credits');mkdirSync(prefix,{recursive:true});
   copyFileSync(new URL('../../../package.json',import.meta.url),join(fixture,'package.json'));
   cpSync(new URL('../collector',import.meta.url),join(prefix,'collector'),{recursive:true});
   const git=(...args)=>execFileSync('git',['-C',fixture,...args],{encoding:'utf8',env:{...process.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:join(root,'empty-config')}});
-  git('init','--quiet');git('add','.');git('-c','user.name=Package test','-c','user.email=test@example.invalid','commit','--quiet','--no-verify','-m','synthetic package fixture');git('tag','v0.2.2');
+  git('init','--quiet');git('add','.');git('-c','user.name=Package test','-c','user.email=test@example.invalid','commit','--quiet','--no-verify','-m','synthetic package fixture');git('tag','v0.3.0');
   const config=join(root,'gitconfig');writeFileSync(config,`[url "${pathToFileURL(fixture).href}"]\n  insteadOf = ${parsed.repo}\n[protocol "https"]\n  allow = never\n[protocol "file"]\n  allow = always\n`);
   const env={...process.env,GIT_CONFIG_GLOBAL:config,GIT_CONFIG_NOSYSTEM:'1',GIT_TERMINAL_PROMPT:'0',npm_config_offline:'true'};
   const cli=join(runtime.root,'dist/cli.js');assert(existsSync(cli));
@@ -38,14 +38,14 @@ if (!process.argv.includes('--isolated')) {
     await loader.reload();const result=loader.getExtensions();assert.deepEqual(result.errors,[]);return result;
   };
   const standalone=await load('');assert.equal(standalone.runtime.pendingNativeProviderRegistrations.length,0);
-  assert(!existsSync(join(root,'.pi/agent/session-credits-status')));assert(!existsSync(join(root,'.pi/agent/session-credits')));
+  assert(!existsSync(join(root,'.pi/agent/copilot-session-credits-status')));assert(!existsSync(join(root,'.pi/agent/copilot-session-credits')));
   const loaded=await load('thr_fixture'),extension=loaded.extensions.find(e=>e.path.endsWith('/collector/extension.ts'));assert(extension);
   const id='11111111-1111-4111-8111-111111111111',providerSession='pi_'+id,notices=[];
   const ctx={sessionManager:{getSessionId:()=>id,getSessionFile:()=>join(root,providerSession+'.jsonl')},ui:{notify:text=>notices.push(text)}};
   for(const handler of extension.handlers.get('session_start')??[])await handler({reason:'startup'},ctx);
   const artifact=join(root,'reader-only.mjs');copyFileSync(new URL('../dist/host.js',import.meta.url),artifact);
   const {createHostEntry}=await import(pathToFileURL(artifact));
-  const h=experimental_createHostEntryHarness(createHostEntry([join(root,'.pi/agent/session-credits')],join(root,'cli'),join(root,'.pi/agent/session-credits-status')));
+  const h=experimental_createHostEntryHarness(createHostEntry());
   try {
     let usage=await h.experimental_call('read',{provider:'pi',sessionId:providerSession});
     const compatible=runtime.version.split('.')[0]==='1'&&Number(runtime.version.split('.')[1])>=5||Number(runtime.version.split('.')[0])>1;
@@ -56,15 +56,23 @@ if (!process.argv.includes('--isolated')) {
       const model={id:'synthetic',name:'synthetic',provider:'github-copilot',api:'openai-responses',baseUrl:'http://127.0.0.1:1',reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:8192,maxTokens:64};
       const stream=provider.stream(model,{messages:[{role:'user',content:'SYNTHETIC_PRIVATE',timestamp:0}]},{apiKey:'SYNTHETIC_NOT_A_KEY',onProviderStreamEvent:()=>{raw++;},onResponse:()=>{responses++;},fetch:async url=>{assert.equal(new URL(String(url)).hostname,'127.0.0.1');calls++;const response={id:'synthetic',status:'completed',output:[],usage:{input_tokens:2,output_tokens:1,total_tokens:3}};const frame=data=>`event: ${data.type}\ndata: ${JSON.stringify(data)}\n\n`;return new Response(frame({type:'response.created',response:{id:response.id}})+frame({type:'response.completed',response,copilot_usage:{total_nano_aiu:'1230000000'}})+'data: [DONE]\n\n',{headers:{'content-type':'text/event-stream'}});}});
       for await(const event of stream)assert.notEqual(event.type,'error');assert.equal((await stream.result()).stopReason,'stop');await Promise.resolve();assert.equal(calls,1);assert(raw>0);assert.equal(responses,1);
-      const fresh=experimental_createHostEntryHarness(createHostEntry([join(root,'.pi/agent/session-credits')],join(root,'cli'),join(root,'.pi/agent/session-credits-status')));
+      const fresh=experimental_createHostEntryHarness(createHostEntry());
       usage=await fresh.experimental_call('read',{provider:'pi',sessionId:providerSession});assert.equal(usage.aic,'1.23');assert.equal(usage.coverage,'partial');await fresh.experimental_dispose();
+      const legacy=join(root,'.pi/agent/session-credits'); // Explicit default-root compatibility fixture; never a new writer destination.
+      mkdirSync(legacy,{mode:0o700});
+      const newRoot=join(root,'.pi/agent/copilot-session-credits'),legacyEpoch='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',legacyCall='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const legacyRows=readFileSync(join(newRoot,readdirSync(newRoot)[0]),'utf8').trim().split('\n').map(JSON.parse).map(row=>({...row,epoch:legacyEpoch,...row.callId?{callId:legacyCall}:{},...row.billing?.length?{billing:[{nanoAiu:'770000000'}]}:{}}));
+      const legacyText=legacyRows.map(JSON.stringify).join('\n')+'\n';writeFileSync(join(legacy,legacyEpoch+'.jsonl'),legacyText,{mode:0o600});
+      const combined=experimental_createHostEntryHarness(createHostEntry());
+      assert.equal((await combined.experimental_call('read',{provider:'pi',sessionId:providerSession})).aic,'2');await combined.experimental_dispose();assert.equal(readFileSync(join(legacy,legacyEpoch+'.jsonl'),'utf8'),legacyText);
+
       await extension.commands.get('copilot-probe').handler('off',ctx);assert.equal((await h.experimental_call('read',{provider:'pi',sessionId:providerSession})).readiness.state,'disabled');
       await extension.commands.get('copilot-probe').handler('on',ctx);assert.equal((await h.experimental_call('read',{provider:'pi',sessionId:providerSession})).readiness.state,'ready');
-      const text=readdirSync(join(root,'.pi/agent/session-credits')).map(n=>readFileSync(join(root,'.pi/agent/session-credits',n),'utf8')).join('');assert(!text.includes('SYNTHETIC_PRIVATE'));assert(!text.includes('SYNTHETIC_NOT_A_KEY'));
+      const text=readdirSync(join(root,'.pi/agent/copilot-session-credits')).map(n=>readFileSync(join(root,'.pi/agent/copilot-session-credits',n),'utf8')).join('');assert(!text.includes('SYNTHETIC_PRIVATE'));assert(!text.includes('SYNTHETIC_NOT_A_KEY'));
     }
     for(const handler of extension.handlers.get('session_shutdown')??[])await handler({reason:'quit'},ctx);
     assert.equal((await h.experimental_call('read',{provider:'pi',sessionId:providerSession})).readiness.state,'unconfirmed');
-    const retained=join(root,'.pi/agent/session-credits/retain');mkdirSync(join(root,'.pi/agent/session-credits'),{recursive:true,mode:0o700});writeFileSync(retained,'retain',{mode:0o600});
+    const retained=join(root,'.pi/agent/copilot-session-credits/retain');mkdirSync(join(root,'.pi/agent/copilot-session-credits'),{recursive:true,mode:0o700});writeFileSync(retained,'retain',{mode:0o600});
     command('remove',source);assert.equal(readFileSync(retained,'utf8'),'retain');
     assert.equal((await load('thr_fixture')).extensions.filter(e=>e.path.endsWith('/collector/extension.ts')).length,0);
     console.log(JSON.stringify({piVersion:runtime.version,source,gitTransport:'HTTPS rewritten to local file fixture; HTTPS disabled',results:['Actual pinned Git install/list/remove and Pi loader','Standalone companion inert; BB-only exact identity readiness','Supported synthetic usage and host reader, or unsupported runtime diagnostic','Off/on, shutdown and receipt retention']},null,2));

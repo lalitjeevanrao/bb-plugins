@@ -1,11 +1,11 @@
 {
   "$schema": "https://getbb.app/schemas/plugins.schema.json",
   "schemaVersion": 1,
-  "name": "session-credits-monorepo",
+  "name": "copilot-session-credits",
   "plugins": [
     {
-      "name": "session-credits",
-      "source": "./packages/bb-plugin-session-credits"
+      "name": "copilot-session-credits",
+      "source": "./packages/bb-plugin-copilot-session-credits"
     }
   ]
 }

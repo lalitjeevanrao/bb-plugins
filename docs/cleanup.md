@@ -1,24 +1,26 @@
-# Archive Pi receipts
+# Archive Pi receipts and startup status
 
-Use this only when capacity is full or you deliberately want to clear meter history. There is no prune command.
+Stop **all** Pi processes, including BB-launched sessions, before archiving files. There is no automatic prune or migration command. Version 0.3.0 writes only to the new roots; BB continues reading the legacy roots as compatibility inputs.
 
-1. Stop **all** Pi processes, including BB-launched ones. Do not move files while a collector runs.
-2. Move the whole capture folder to a new private sibling directory:
+| Kind | New writes | Legacy read-only compatibility |
+| --- | --- | --- |
+| Usage receipts | `~/.pi/agent/copilot-session-credits/` | `~/.pi/agent/session-credits/` |
+| Startup status | `~/.pi/agent/copilot-session-credits-status/` | `~/.pi/agent/session-credits-status/` |
+
+To archive one receipt root, choose its exact path and move it to a fresh private sibling directory. For example:
 
 ```sh
-archive="$HOME/.pi/agent/session-credits-archive-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$archive" &&
-  mv "$HOME/.pi/agent/session-credits" "$archive"
+source="$HOME/.pi/agent/copilot-session-credits"
+archive="${source}-archive-$(date -u +%Y%m%dT%H%M%SZ)"
+test ! -e "$archive" && mv "$source" "$archive"
 ```
 
-3. Restart Pi. The collector creates a fresh private capture folder when it records.
+For legacy receipt cleanup, use `source="$HOME/.pi/agent/session-credits"` instead. Treat the roots independently; do not merge, copy or move legacy receipts into the new capture folder. The reader already discovers both roots. Each folder has bounded reads; the current writer stops at 256 entries in its new receipt folder.
 
-The move preserves receipts and their permissions. The archive is outside the reader's fixed folder; do not make it public or put it back while Pi runs.
-
-**Older sessions lose their visible meter history.** Resuming one records only its new part. The meter cannot reconstruct removed history or merge an archive automatically. Missing data is not zero.
+The move preserves data and permissions. Keep archives private and outside both reader roots. **Archived sessions lose their visible meter history.** Resuming one records only its new part; missing data cannot be reconstructed or merged automatically. Restart Pi after archival; the collector creates its new private receipt folder lazily when recording.
 
 ## Startup-status leftovers
 
-Readiness files are separate from receipts, under `~/.pi/agent/session-credits-status/`. Normal shutdown removes an instance's own file. Crashes may leave small status records and empty session directories. The reader does not count records whose process is gone, and treats excessive or conflicting records as unconfirmed.
+Normal shutdown removes only the instance's own status file. Crashes can leave small records and empty session directories. The reader checks both status roots, ignores dead processes and refuses unsafe, excessive or ambiguous records. PID liveness is only best-effort startup telemetry.
 
-If status remains unconfirmed because of old records, stop all Pi processes and move that status folder to a private archive. Restarting a configured Pi session recreates its status. This does not remove credit receipts or recover missing usage.
+If leftovers prevent confirmation, stop all Pi processes and archive the affected new or legacy status root using the same private-sibling procedure. Restarting configured Pi recreates status under the new root. Archiving status does not remove credit receipts or recover missing usage. Updates/removals never archive or delete either root automatically.

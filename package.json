@@ -1,6 +1,6 @@
 {
-  "name": "session-credits",
-  "version": "0.2.2",
+  "name": "copilot-session-credits",
+  "version": "0.3.0",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -16,11 +16,11 @@
   ],
   "scripts": {
     "test:packages": "node test/package-install-test.mjs",
-    "test:plugin": "npm --prefix packages/bb-plugin-session-credits test",
-    "test:collector": "node packages/bb-plugin-session-credits/collector/test/test.mjs && node packages/bb-plugin-session-credits/collector/test/regression-test.mjs && node packages/bb-plugin-session-credits/collector/test/sdk-test.mjs && node packages/bb-plugin-session-credits/collector/test/readiness-test.mjs",
+    "test:plugin": "npm --prefix packages/bb-plugin-copilot-session-credits test",
+    "test:collector": "node packages/bb-plugin-copilot-session-credits/collector/test/test.mjs && node packages/bb-plugin-copilot-session-credits/collector/test/regression-test.mjs && node packages/bb-plugin-copilot-session-credits/collector/test/sdk-test.mjs && node packages/bb-plugin-copilot-session-credits/collector/test/readiness-test.mjs",
     "test": "npm run test:plugin && npm run test:collector && npm run test:packages",
-    "typecheck": "npm --prefix packages/bb-plugin-session-credits run typecheck",
-    "build": "npm --prefix packages/bb-plugin-session-credits run build"
+    "typecheck": "npm --prefix packages/bb-plugin-copilot-session-credits run typecheck",
+    "build": "npm --prefix packages/bb-plugin-copilot-session-credits run build"
   },
   "author": "Lalit Rao",
   "repository": {
@@ -33,7 +33,7 @@
   },
   "pi": {
     "extensions": [
-      "./packages/bb-plugin-session-credits/collector/extension.ts"
+      "./packages/bb-plugin-copilot-session-credits/collector/extension.ts"
     ]
   }
 }

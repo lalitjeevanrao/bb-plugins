@@ -25,7 +25,7 @@ Requires **BB 0.48.1+** and authenticated GitHub Copilot access. Tested on macOS
 Install **Copilot session credits** from BB Community when available, or from Git:
 
 ```sh
-bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.2 --plugin session-credits
+bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.3.0 --plugin copilot-session-credits
 ```
 
 **Copilot CLI:** no extra installation. Credits appear when the CLI reports usage.
@@ -33,7 +33,7 @@ bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.
 **Pi Coding Agent:** requires Pi **1.5.0+**. On the machine running Pi:
 
 ```sh
-pi install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.2
+pi install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.3.0
 ```
 
 Use the same Pi executable and agent directory as BB. For remote threads, install on the remote host. Match any `PI_CODING_AGENT_DIR` or custom launcher configuration.
@@ -50,33 +50,35 @@ Click the indicator for the exact amount, coverage and capture status. Recorded 
 
 ## Privacy
 
-The plugin adds no analytics endpoint. Pi receipts store usage amounts, model labels, timestamps and pseudonymous identifiers—not prompts, responses or credentials. They live in private directories under `~/.pi/agent/session-credits/`; startup status lives in `~/.pi/agent/session-credits-status/`.
+The plugin adds no analytics endpoint. Pi receipts store usage amounts, model labels, timestamps and pseudonymous identifiers—not prompts, responses or credentials. They live in private directories under `~/.pi/agent/copilot-session-credits/`; startup status lives in `~/.pi/agent/copilot-session-credits-status/`.
 
 Copilot CLI usage is read from a bounded local log tail. Only usage fields are returned to BB. [Security details](SECURITY.md) · [Accounting and coverage](docs/accounting.md).
 
-## Update or remove
+## Update from 0.2.x or remove
 
-Git-tag installs are pinned. To replace an older BB release:
+Version 0.3.0 changes the BB plugin ID to `copilot-session-credits`. Remove the old BB ID before installing the renamed plugin so both displays do not load:
 
 ```sh
 bb plugin remove session-credits
-bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.2.2 --plugin session-credits
+bb plugin install git:https://github.com/lalitjeevanrao/copilot-session-credits.git@v0.3.0 --plugin copilot-session-credits
 ```
 
-Refresh the BB window after updating. **The v0.2.2 fixes affect the BB UI only; the Pi companion from v0.2.1 can stay installed.** No Pi restart is needed for this UI update.
+Refresh BB after updating. To replace a later pinned release, remove `copilot-session-credits` before installing the newer source.
 
-For a future companion update, use `pi list` to find the installed source, remove that exact source with `pi remove`, then install the newer tag and restart existing Pi sessions.
+**Update the Pi companion too.** Use `pi list` with the same runtime and agent directory as BB, remove the exact currently installed source with `pi remove`, then install the v0.3.0 source shown above. Do not add a second Pi source alongside the old one. Stop/restart existing Pi sessions after the update; Retry check does not restart them. The Git repository URL is unchanged.
 
-To uninstall the BB display, run `bb plugin remove session-credits`. To uninstall the companion, run `pi remove` with its installed Git source. Removing either package preserves receipts. The receipt folder has a 256-entry limit; [archive old receipts with Pi stopped](docs/cleanup.md).
+New receipt writes use `~/.pi/agent/copilot-session-credits/`; startup status uses `~/.pi/agent/copilot-session-credits-status/`. The BB reader also reads the legacy `~/.pi/agent/session-credits/` and `~/.pi/agent/session-credits-status/` as compatibility inputs. Existing data remains visible without moving or copying it. Both status roots are checked together: multiple live instances are unconfirmed rather than silently selecting one. No update or removal command deletes or moves receipts.
+
+Uninstall the display with `bb plugin remove copilot-session-credits`. Remove the companion using its exact installed source from `pi list`. [Cleanup guidance covers both new and legacy roots](docs/cleanup.md).
 
 ## Development
 
 Requires Node 22.19+, BB and Pi 1.5.0+:
 
 ```sh
-npm --prefix packages/bb-plugin-session-credits ci
+npm --prefix packages/bb-plugin-copilot-session-credits ci
 npm test
-bb plugin install . --plugin session-credits
+bb plugin install . --plugin copilot-session-credits
 ```
 
 Tests use synthetic transport and make no paid model calls. Composer placement follows BB’s DOM and may need adjustment after BB UI changes.

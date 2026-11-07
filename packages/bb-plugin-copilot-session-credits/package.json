@@ -1,6 +1,6 @@
 {
-  "name": "bb-plugin-session-credits",
-  "version": "0.2.2",
+  "name": "bb-plugin-copilot-session-credits",
+  "version": "0.3.0",
   "license": "MIT",
   "keywords": [
     "bb-plugin",
@@ -15,7 +15,7 @@
   },
   "bb": {
     "name": "Copilot session credits",
-    "description": "GitHub Copilot credits beside the context indicator. Pi receipts and Copilot CLI checkpoints.",
+    "description": "Track reported GitHub Copilot credit usage for each BB thread.",
     "branding": {
       "icon": "Coins"
     },
@@ -56,7 +56,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/lalitjeevanrao/copilot-session-credits.git",
-    "directory": "packages/bb-plugin-session-credits"
+    "directory": "packages/bb-plugin-copilot-session-credits"
   },
   "homepage": "https://github.com/lalitjeevanrao/copilot-session-credits#readme",
   "bugs": {

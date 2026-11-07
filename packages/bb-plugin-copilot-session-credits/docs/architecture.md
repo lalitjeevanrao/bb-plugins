@@ -21,7 +21,7 @@ flowchart TB
   end
   A -->|"poll 5 s while visible"| U
   T -->|"typed host call, exact hostId"| RD
-  RD --> PI[("Pi receipts<br/>~/.pi/agent/session-credits/*.jsonl")]
+  RD --> PI[("Pi receipts<br/>~/.pi/agent/copilot-session-credits/*.jsonl")]
   RD --> CL[("Copilot CLI log<br/>~/.copilot/session-state/&lt;uuid&gt;/events.jsonl")]
 ```
 
@@ -47,7 +47,7 @@ The internal collector (`collector/probe.mjs`) wraps the native GitHub Copilot p
 
 The repository root declares a normal Pi package whose entry is `collector/extension.ts`. Users install it with Pi on the execution host. BB installs only its reader/UI package; no env contribution, artifact staging or BB launcher change is used. The companion activates when BB thread metadata is present and requires the actual loaded Pi runtime to be 1.5.0+.
 
-The initializer registers a small startup-readiness reporter. Private `session-credits-status/pi_UUID/instance_UUID.json` files contain only the provider session, process ID, instance ID, runtime version and readiness enum. Each instance owns its file and removes only that file on shutdown. The host validates ownership, modes, bounds and identity, checks process liveness, and treats ambiguous or unsafe records as unconfirmed. Readiness reads bypass the short usage cache. There is no heartbeat; PID reuse and same-user modification are outside this telemetry guarantee.
+The initializer registers a small startup-readiness reporter. Private `copilot-session-credits-status/pi_UUID/instance_UUID.json` files contain only the provider session, process ID, instance ID, runtime version and readiness enum. Each instance owns its file and removes only that file on shutdown. The host validates ownership, modes, bounds and identity, checks process liveness, and treats ambiguous or unsafe records as unconfirmed. Readiness reads bypass the short usage cache. There is no heartbeat; PID reuse and same-user modification are outside this telemetry guarantee.
 
 No receipt is required to show startup readiness. Absence of readiness does not prove an absent installation. Capture errors, unsupported runtimes and on/off commands update the readiness state. Existing usage and accounting health take precedence over “awaiting first usage.” The popup remains actionable before the provider session has started.
 

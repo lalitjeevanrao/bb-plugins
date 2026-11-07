@@ -4,7 +4,7 @@ The Pi extension writes these files; the BB plugin host reader consumes them. Th
 
 ## Location and permissions
 
-- Directory: `~/.pi/agent/session-credits/` (owner-only `0700`, canonical path, owned by the reading user).
+- Directory: `~/.pi/agent/copilot-session-credits/` (owner-only `0700`, canonical path, owned by the reading user).
 - One file per capture: `<epoch-uuid>.jsonl`, mode `0600`, regular single-link file, opened without following symlinks.
 - Allocation lock: `.capture-lock/` (a directory created atomically).
 - Cap: 256 entries (64 before `0.2.0`); new captures are refused when full. There is no prune command; use [stopped-Pi archival](cleanup.md). Per file: 1 MiB, 10,000 records, with an explicit `capture_truncated` row.

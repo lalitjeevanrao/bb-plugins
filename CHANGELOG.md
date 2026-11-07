@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0] — 2026-11-07
+
+- Breaking: rename the BB plugin ID/package to `copilot-session-credits`; display name remains Copilot session credits.
+- New Pi writes use the renamed receipt/status roots. Continue reading legacy roots without moving or deleting user data.
+- Document removing the old BB ID and replacing the existing Pi companion source to avoid duplicate installations.
+- Clarify reported usage, source-specific coverage, full-trust permissions and data boundaries.
+
 ## [0.2.2] — 2026-11-06
 
 - Keep setup and recorded credits in the composer footer before context usage is available.

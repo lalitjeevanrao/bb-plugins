@@ -50,17 +50,17 @@ function CreditControl({ placement = "toolbar" }: { placement?: "toolbar" | "com
   if (hidden) return null;
   const amount = displayAic(usage?.aic ?? null), description = `${usage?.source === "pi-receipts" ? "Observed" : "Session"} ${amount} AIC · ${label} · ${providerLabel}`;
   // React portal mouse events otherwise reach the composer handler that steals focus.
-  return <Popover.Root modal={false}><Popover.Trigger asChild><button type="button" className={`session-credit-control session-credit-${placement}`} data-testid="session-credit-meter" data-placement={placement}
+  return <Popover.Root modal={false}><Popover.Trigger asChild><button type="button" className={`copilot-session-credit-control copilot-session-credit-${placement}`} data-testid="copilot-session-credit-meter" data-placement={placement}
     title={description} aria-label={`Copilot session credits: ${amount} AIC, ${label}, ${providerLabel}`} aria-haspopup="dialog">
-    <CoinIcon/><strong>{details.setup && usage?.aic == null ? "Set up credits" : <>{amount} <span>AIC</span></>}</strong><span className="session-credit-dot" data-state={label} data-tone={details.tone} aria-hidden="true"/>
-  </button></Popover.Trigger><Popover.Portal><Popover.Content data-bb-plugin-root="" data-bb-plugin="session-credits" className="session-credit-panel" onMouseDown={event => event.stopPropagation()} side="top" align="end" sideOffset={8} collisionPadding={12} aria-labelledby={titleId}>
+    <CoinIcon/><strong>{details.setup && usage?.aic == null ? "Set up credits" : <>{amount} <span>AIC</span></>}</strong><span className="copilot-session-credit-dot" data-state={label} data-tone={details.tone} aria-hidden="true"/>
+  </button></Popover.Trigger><Popover.Portal><Popover.Content data-bb-plugin-root="" data-bb-plugin="copilot-session-credits" className="copilot-session-credit-panel" onMouseDown={event => event.stopPropagation()} side="top" align="end" sideOffset={8} collisionPadding={12} aria-labelledby={titleId}>
     <CreditDetails credits={credits} titleId={titleId}/>
   </Popover.Content></Popover.Portal></Popover.Root>;
 }
 function CreditPlacement({ compact = false }: { compact?: boolean }) {
   const anchor = useRef<HTMLSpanElement>(null), [target, setTarget] = useState<HTMLElement | null>();
   useEffect(() => attachCreditTarget(anchor.current, setTarget), []);
-  return <><span hidden ref={anchor} data-session-credit-origin=""/>{target
+  return <><span hidden ref={anchor} data-copilot-session-credit-origin=""/>{target
     ? createPortal(<CreditControl placement="info-row"/>, target)
     : target === null ? <CreditControl placement={compact ? "compact" : "toolbar"}/> : null}</>;
 }
@@ -74,27 +74,27 @@ function CreditDetails({ credits, titleId }: { credits: ReturnType<typeof useSes
   const { current, usage, label, providerLabel, details, refresh } = credits;
   const [copyMessage, setCopyMessage] = useState("");
   const unconfigured = details.setup && usage?.aic == null;
-  return <section className="session-credit-details" data-testid="session-credit-details" data-tone={details.tone}>
+  return <section className="copilot-session-credit-details" data-testid="copilot-session-credit-details" data-tone={details.tone}>
     <header><h3 id={titleId}>Copilot session credits</h3><Popover.Close asChild><button type="button" aria-label="Close credit details">×</button></Popover.Close></header>
-    {!unconfigured && <><div className="session-credit-total"><strong>{displayAic(usage?.aic ?? null)} AIC</strong><span className="session-credit-state" data-state={label}>{label}</span></div>
-    <p className="session-credit-source">{providerLabel} · {usage?.source === "pi-receipts" ? "Observed subtotal" : usage?.source === "copilot-checkpoint" ? "Latest checkpoint" : "No captured amount"}</p>
+    {!unconfigured && <><div className="copilot-session-credit-total"><strong>{displayAic(usage?.aic ?? null)} AIC</strong><span className="copilot-session-credit-state" data-state={label}>{label}</span></div>
+    <p className="copilot-session-credit-source">{providerLabel} · {usage?.source === "pi-receipts" ? "Observed subtotal" : usage?.source === "copilot-checkpoint" ? "Latest checkpoint" : "No captured amount"}</p>
     <p>{details.summary}</p>
-    <p className="session-credit-scope">{details.scope}</p></>}
-    {(details.notes.length > 0 || details.action) && <div className="session-credit-callout">
+    <p className="copilot-session-credit-scope">{details.scope}</p></>}
+    {(details.notes.length > 0 || details.action) && <div className="copilot-session-credit-callout">
       {details.notes.map((note: string) => <p key={note}>{note}</p>)}
       {details.action && <p>{details.action}</p>}
     </div>}
-    {details.setup && <section className="session-credit-setup" aria-label="Set up Pi credits">
+    {details.setup && <section className="copilot-session-credit-setup" aria-label="Set up Pi credits">
       <h4>Set up Pi credits</h4>
       <p>Add the companion extension on the machine running this Pi session.</p>
-      <code className="session-credit-install" tabIndex={0}>{piInstallCommand}</code>
-      <div className="session-credit-setup-actions"><button type="button" onClick={async () => setCopyMessage(await copyPiInstallCommand())}>Copy install command</button><button type="button" onClick={refresh}>Retry check</button></div>
+      <code className="copilot-session-credit-install" tabIndex={0}>{piInstallCommand}</code>
+      <div className="copilot-session-credit-setup-actions"><button type="button" onClick={async () => setCopyMessage(await copyPiInstallCommand())}>Copy install command</button><button type="button" onClick={refresh}>Retry check</button></div>
       {copyMessage && <p role="status">{copyMessage}</p>}
       <p>Use Pi 1.5.0+ with Copilot signed in. Reload or restart this session after installing.</p>
       <details><summary>Custom or remote setup</summary><p>Install on the execution host, using the same Pi runtime and agent directory as BB. Match PI_CODING_AGENT_DIR and any custom launcher configuration, then retry here.</p></details>
     </section>}
-    {!unconfigured && details.coverage && <p className="session-credit-coverage">{details.coverage}</p>}
-    {!unconfigured && <details className="session-credit-debug">
+    {!unconfigured && details.coverage && <p className="copilot-session-credit-coverage">{details.coverage}</p>}
+    {!unconfigured && <details className="copilot-session-credit-debug">
       <summary>Details</summary>
       {usage?.aic != null && <p>Exact amount: <code>{usage.aic} AIC</code></p>}
       {usage?.source === "pi-receipts" && <p>{usage.reported} counted / {usage.observed} observed calls
@@ -102,14 +102,14 @@ function CreditDetails({ credits, titleId }: { credits: ReturnType<typeof useSes
         {usage.conflicting > 0 && <> · {usage.conflicting} invalid or conflicting</>}
         {usage.missing > 0 && <> · {usage.missing} without credits</>}</p>}
       {usage?.updatedAt && <p>Last record: <time dateTime={usage.updatedAt}>{new Date(usage.updatedAt).toLocaleString(undefined, { timeZoneName: "short" })}</time></p>}
-      {current?.sessionId && <code className="session-credit-session">{current.sessionId}</code>}
+      {current?.sessionId && <code className="copilot-session-credit-session">{current.sessionId}</code>}
     </details>}
-    {!unconfigured && <p className="session-credit-note">Provider usage. Not an invoice.</p>}
+    {!unconfigured && <p className="copilot-session-credit-note">Provider usage. Not an invoice.</p>}
   </section>;
 }
 export default definePluginApp(app => {
-  app.composer.customize({ id: "session-credits", scopes: ["thread"],
-    actions: [{ id: "session-credits", component: CreditToolbar }],
-    banners: [{ id: "session-credits-compact", chrome: "bare", component: CreditCompactFallback }],
+  app.composer.customize({ id: "copilot-session-credits", scopes: ["thread"],
+    actions: [{ id: "copilot-session-credits", component: CreditToolbar }],
+    banners: [{ id: "copilot-session-credits-compact", chrome: "bare", component: CreditCompactFallback }],
   });
 });

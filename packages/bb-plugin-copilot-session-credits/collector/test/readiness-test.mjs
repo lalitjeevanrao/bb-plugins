@@ -42,6 +42,11 @@ try {
   const markers=Array.from({length:9},()=>createReadiness(directory,'1.5.0'));for(const marker of markers)marker.start(ctx);assert.equal(readReadiness(directory,providerSession).state,'unconfirmed');for(const marker of markers)marker.stop();
   const alias=join(root,'status-alias');symlinkSync(directory,alias);assert.equal(readReadiness(alias,providerSession).state,'unconfirmed');
  });
+ test('New and explicit legacy status roots are checked together without hiding live ambiguity',()=>{
+  const current=join(root,'copilot-session-credits-status'),legacy=join(root,'session-credits-status'); // Read-only pre-0.3 compatibility fixture.
+  const old=createReadiness(legacy,'1.5.0');old.start(ctx);assert.equal(readReadiness([current,legacy],providerSession).state,'ready');
+  const next=createReadiness(current,'1.5.0');next.start(ctx);assert.equal(readReadiness([current,legacy],providerSession).state,'unconfirmed');old.stop();assert.equal(readReadiness([current,legacy],providerSession).state,'ready');next.stop();
+ });
  test('Throwing hook or provider registration stays fail-open with no receipts',()=>{
   for(const hookFailure of [true,false]){
    const directory=join(root,'failed-registration');let diagnostics=0;
