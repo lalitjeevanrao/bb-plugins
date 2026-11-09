@@ -7,6 +7,11 @@
 - Composer Auto-collapse: focus-out and idle collapse that keeps drafts.
 - Credits keep their unprefixed tags; the new plugins use `home-hero/` and `composer-autocollapse/` tag prefixes.
 
+## [0.3.2] — 2026-11-09
+
+- Show Copilot credits for the official registry provider `acp-github-copilot-cli` and the exact custom variants `acp-copilot-quiet` and `acp-copilot-fm`.
+- Cover expanded/compact visibility, environment-host routing, exact-session isolation and cumulative usage checkpoints for all supported CLI IDs. Unrelated ACP providers remain unsupported.
+
 ## [0.3.1] — 2026-11-07
 
 - Keep recorded usage status independent from Pi collector readiness and BB connection state.

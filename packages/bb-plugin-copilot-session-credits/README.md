@@ -15,15 +15,17 @@ Requires **BB 0.48.1+** and authenticated GitHub Copilot access. Tested on macOS
 Install **Copilot session credits** from BB Community when available, or from Git:
 
 ```sh
-bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.1 --plugin copilot-session-credits
+bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.2 --plugin copilot-session-credits
 ```
 
 **Copilot CLI:** no extra installation. Credits appear when the CLI reports usage. Click the amount for the latest checkpoint and session scope.
 
+Supported Copilot ACP IDs are `acp-copilot`, `acp-gh-copilot`, `acp-github-copilot-cli` (official registry), `acp-copilot-quiet` and `acp-copilot-fm`. Other ACP IDs are not accepted by family or prefix. No duplicate manual registration is needed for the official registry provider.
+
 **Pi Coding Agent:** requires Pi **1.5.0+**. On the machine running Pi:
 
 ```sh
-pi install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.1
+pi install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.2
 ```
 
 Use the same Pi executable and agent directory as BB. For remote threads, install on the remote host. Match any `PI_CODING_AGENT_DIR` or custom launcher configuration.
@@ -50,12 +52,12 @@ Version 0.3.0 changes the BB plugin ID to `copilot-session-credits`. Remove the 
 
 ```sh
 bb plugin remove session-credits
-bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.1 --plugin copilot-session-credits
+bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.2 --plugin copilot-session-credits
 ```
 
 Refresh BB after updating. To replace a later pinned release, remove `copilot-session-credits` before installing the newer source.
 
-**Update the Pi companion too.** Use `pi list` with the same runtime and agent directory as BB, remove the exact currently installed source with `pi remove`, then install the v0.3.1 source shown above. Do not add a second Pi source alongside the old one. Stop/restart existing Pi sessions after the update. The repository URL is unchanged by the collection rename: old `copilot-session-credits` links redirect to `bb-plugins`.
+**Update the Pi companion too.** Use `pi list` with the same runtime and agent directory as BB, remove the exact currently installed source with `pi remove`, then install the v0.3.2 source shown above. Do not add a second Pi source alongside the old one. Stop/restart existing Pi sessions after the update. The repository URL is unchanged by the collection rename: old `copilot-session-credits` links redirect to `bb-plugins`.
 
 New receipt writes use `~/.pi/agent/copilot-session-credits/`; startup status uses `~/.pi/agent/copilot-session-credits-status/`. The BB reader also reads the legacy `~/.pi/agent/session-credits/` and `~/.pi/agent/session-credits-status/` as compatibility inputs. Existing data remains visible without moving or copying it. Both status roots are checked together: multiple live instances are unconfirmed rather than silently selecting one. No update or removal command deletes or moves receipts.
 

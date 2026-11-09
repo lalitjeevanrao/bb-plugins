@@ -53,7 +53,7 @@ No receipt is required to show startup readiness. Absence of readiness does not 
 
 ## Copilot CLI path
 
-BB already runs the CLI via `acp-copilot` / `acp-gh-copilot` or the official registry-added `acp-github-copilot-cli` provider. These exact IDs route to the same Copilot reader; unrelated ACP providers remain unsupported. No duplicate manual registration is needed. The host reader opens that session's `events.jsonl`, reads a bounded tail, and keeps the **latest complete `session.usage_checkpoint`**: amount `data.totalNanoAiu`, coverage `data.accountingSnapshot.aiCreditsStatus`. Cumulative: used once.
+BB already runs the CLI via `acp-copilot` / `acp-gh-copilot` or the official registry-added `acp-github-copilot-cli` provider. Custom registrations `acp-copilot-quiet` and `acp-copilot-fm` are also supported. These exact IDs route to the same Copilot reader; unrelated ACP providers remain unsupported. No duplicate manual registration is needed. The host reader opens that session's `events.jsonl`, reads a bounded tail, and keeps the **latest complete `session.usage_checkpoint`**: amount `data.totalNanoAiu`, coverage `data.accountingSnapshot.aiCreditsStatus`. Cumulative: used once.
 
 ## Accounting rules
 

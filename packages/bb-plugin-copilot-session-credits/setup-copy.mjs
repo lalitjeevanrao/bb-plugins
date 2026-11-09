@@ -1,4 +1,4 @@
-export const piInstallCommand = 'pi install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.1';
+export const piInstallCommand = 'pi install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.2';
 export async function copyPiInstallCommand(clipboard = globalThis.navigator?.clipboard) {
   try {
     if (!clipboard?.writeText) throw Error('Clipboard unavailable');
