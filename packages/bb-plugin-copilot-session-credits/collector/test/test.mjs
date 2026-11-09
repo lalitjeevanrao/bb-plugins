@@ -47,6 +47,37 @@ try {
     assert.equal(statSync(directory).mode & 0o777, 0o700);
     for (const name of readdirSync(directory)) assert.equal(statSync(join(directory, name)).mode & 0o777, 0o600);
   });
+  await check('Chat billing phases require supported final shapes; unknown shapes never become final', async () => {
+    const directory = join(root, 'chat-phases'), h = harness(directory, { autoStart: true }); h.emit('session_start');
+    const choice = finish_reason => [{ index: 0, finish_reason }];
+    const cases = [
+      [choice(null), undefined, 'interim'], [choice('stop'), undefined, 'final'], [choice('length'), undefined, 'final'],
+      [choice('tool_calls'), undefined, 'final'], [choice('function_call'), undefined, 'final'], [[], {}, 'final'],
+      [[], undefined, 'unknown'], [choice('content_filter'), undefined, 'unknown'], [choice('other'), undefined, 'unknown'],
+      [[{ index: 1, finish_reason: 'stop' }], undefined, 'unknown'], [[...choice('stop'), { index: 1, finish_reason: 'stop' }], undefined, 'unknown'],
+      [null, undefined, 'unknown'], [[null], undefined, 'unknown']
+    ];
+    for (const [choices, usage] of cases) await h.emit('provider_stream_event', { provider: 'github-copilot', api: 'openai-completions', model: 'fixture', data: { object: 'chat.completion.chunk', id: 'SECRET', choices, usage, copilot_usage: { total_nano_aiu: '0' } } }).result();
+    h.emit('session_shutdown'); const observations = rows(directory).filter(row => row.kind === 'observation');
+    assert.deepEqual(observations.map(row => row.billingPhase), cases.map(row => row[2]));
+    assert(observations.every(row => /^[a-f0-9]{64}$/.test(row.responseHash))); assert(!JSON.stringify(observations).includes('SECRET'));
+  });
+  await check('Markerless Chat chunks normalize only valid shapes; explicit conflicting markers stay unknown', async () => {
+    const directory = join(root, 'markerless'), h = harness(directory, { autoStart: true }); h.emit('session_start');
+    const cases = [
+      [{}, [{ index: 0 }], {}, 'interim'], [{}, [{ index: 0, finish_reason: 'tool_calls' }], {}, 'final'], [{}, [], {}, 'final'],
+      [{}, [], undefined, 'unknown'], [{}, [{ index: 1, finish_reason: 'stop' }], {}, 'unknown'], [{}, [null], {}, 'unknown'],
+      [{ object: null }, [{ index: 0 }], {}, 'unknown'], [{ object: '' }, [{ index: 0 }], {}, 'unknown'],
+      [{ object: 'other' }, [{ index: 0 }], {}, 'unknown'], [{ type: 'other' }, [{ index: 0 }], {}, 'unknown'],
+      [{ object: 'chat.completion.chunk', type: 'other' }, [{ index: 0 }], {}, 'unknown'],
+      [{ type: 'chat.completion.chunk', object: 'other' }, [{ index: 0 }], {}, 'unknown']
+    ];
+    for (const [markers, choices, usage] of cases) await h.emit('provider_stream_event', { provider: 'github-copilot', api: 'openai-completions', model: 'fixture', data: { ...markers, id: 'SECRET', choices, usage, copilot_usage: { total_nano_aiu: '0' } } }).result();
+    h.emit('session_shutdown'); const observations = rows(directory).filter(row => row.kind === 'observation');
+    assert.deepEqual(observations.map(row => row.billingPhase), cases.map(row => row[3]));
+    assert(observations.filter(row => row.billingPhase !== 'unknown').every(row => row.eventType === 'chat.completion.chunk'));
+    assert(!JSON.stringify(observations).includes('SECRET'));
+  });
   await check('duplicate snapshots stay observations, never a fake total', () => {
     const directory = join(root, 'duplicates'), h = harness(directory, { autoStart: true }); h.emit('session_start');
     for (let i = 0; i < 2; i++) h.emit('provider_stream_event', event({ type: 'response.completed', copilot_usage: { total_nano_aiu: 5 } }));

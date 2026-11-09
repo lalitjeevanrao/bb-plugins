@@ -26,7 +26,7 @@ const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManag
 const ai = [join(installed, 'node_modules/@earendil-works/pi-ai/dist/providers/all.js'), join(installed, '../pi-ai/dist/providers/all.js')].find(existsSync);
 const { builtinProviders } = await import(ai);
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'pi-probe-sdk-'))), results = [];
-let session, calls = 0, wrapped;
+let session, calls = 0, wrapped, markerless = false;
 const frame = data => `event: ${data.type ?? 'message'}\ndata: ${JSON.stringify(data)}\n\n`;
 try {
   const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false }, cacheWarming: { enabled: false } });
@@ -41,7 +41,10 @@ try {
     const response = { id: `synthetic-${calls}`, status: 'completed', output: [], usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 } };
     let body;
     if (api === 'openai-responses') body = frame({ type: 'response.created', response: { id: response.id } }) + frame({ type: 'response.completed', response, ...billing }) + 'data: [DONE]\n\n';
-    if (api === 'openai-completions') body = 'data: ' + JSON.stringify({ id: response.id, object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 }, ...billing }) + '\n\ndata: [DONE]\n\n';
+    if (api === 'openai-completions') {
+      const chunk = (amount, finish_reason) => ({ id: response.id, ...(markerless ? {} : { object: 'chat.completion.chunk' }), choices: [{ index: 0, delta: {}, finish_reason }], usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 }, copilot_usage: { total_nano_aiu: amount } });
+      body = [chunk('0', markerless ? undefined : null), chunk('0', markerless ? undefined : null), chunk('7566900000', markerless ? 'tool_calls' : 'stop')].map(data => 'data: ' + JSON.stringify(data) + '\n\n').join('') + 'data: [DONE]\n\n';
+    }
     if (api === 'anthropic-messages') body = frame({ type: 'message_start', message: { id: response.id, role: 'assistant', content: [], model: model.id, usage: { input_tokens: 2, output_tokens: 0 } } }) + frame({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 2, output_tokens: 1 }, ...billing }) + frame({ type: 'message_stop' });
     return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
   };
@@ -71,7 +74,7 @@ try {
   const rows = raw.trim().split('\n').map(JSON.parse);
   assert(!raw.includes('SYNTHETIC-PROMPT-SECRET')); assert(!raw.includes('SYNTHETIC-NOT-A-CREDENTIAL'));
   const observations = rows.filter(row => row.kind === 'observation');
-  assert.equal(observations.filter(row => row.billing.length).length, 3);
+  assert.equal(observations.filter(row => row.billing.length).length, 5);
   assert(observations.every(row => row.callId));
   assert.equal(new Set(rows.filter(row => row.kind === 'call_started').map(row => row.callId)).size, 4);
   assert.equal(rows.filter(row => row.kind === 'call_finished').length, 4);
@@ -80,5 +83,25 @@ try {
   await session.prompt('/copilot-probe off');
   assert.equal(calls, before, 'local command must not invoke model');
   results.push({ name: 'Native three-route dispatch and original callbacks survive wrapping; no content leaks or billable command', status: 'passed' });
+  // A separate BB-bound capture exercises the same real native dispatcher through the host reader.
+  const providerSession = 'pi_11111111-1111-4111-8111-111111111111', directory = join(root, 'bb-receipts'), hooks = new Map();
+  let bbProvider;
+  createProbe({ directory, autoStart: true, provider: fixture })({ on: (name, run) => hooks.set(name, run), registerCommand() {}, registerProvider: value => { bbProvider = value; } });
+  hooks.get('session_start')({ reason: 'startup' }, { sessionManager: { getSessionId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', getSessionFile: () => join(root, providerSession + '.jsonl') } });
+  markerless = true;
+  const bbStream = bbProvider.stream({ ...model, api: 'openai-completions' }, context, {});
+  for await (const event of bbStream) assert.notEqual(event.type, 'error');
+  assert.equal((await bbStream.result()).stopReason, 'toolUse'); await Promise.resolve();
+  const { createHostEntry } = await import('../../dist/host.js');
+  const { experimental_createHostEntryHarness } = await import('@get-bb/plugin-sdk/testing/host');
+  const host = experimental_createHostEntryHarness(createHostEntry([directory], join(root, 'unused-cli'), join(root, 'unused-status')));
+  try {
+    const usage = await host.experimental_call('read', { provider: 'pi', sessionId: providerSession });
+    assert.equal(usage.aic, '7.5669'); assert.equal(usage.reported, 1); assert.equal(usage.conflicting, 0); assert.equal(usage.coverage, 'partial'); assert.equal(usage.captureIssue, false);
+    assert.equal((await host.experimental_call('read', { provider: 'pi', sessionId: 'pi_99999999-9999-4999-8999-999999999999' })).aic, null);
+    const receipts = readdirSync(directory).map(file => readFileSync(join(directory, file), 'utf8')).join('');
+    assert(!receipts.includes('SYNTHETIC-PROMPT-SECRET')); assert(!receipts.includes('SYNTHETIC-NOT-A-CREDENTIAL'));
+    results.push({ name: 'Native Chat streaming zero placeholders then final 7.5669 AIC survive receipts and exact-session host accounting', status: 'passed' });
+  } finally { await host.experimental_dispose(); hooks.get('session_shutdown')({ reason: 'quit' }); }
   console.log(JSON.stringify(results, null, 2));
 } finally { session?.dispose(); rmSync(root, { recursive: true, force: true }); }

@@ -1,6 +1,6 @@
 # Pi receipt contract (schema 3)
 
-The Pi extension writes these files; the BB plugin host reader consumes them. This is the single contract for both packages. If the schema changes, bump `schema` and update the writer and strict reader together.
+The Pi extension writes these files; the BB plugin host reader consumes them. This is the single contract for both packages. Incompatible changes require a `schema` bump and coordinated writer/reader updates. Optional, backward-compatible evidence fields may extend schema 3 when older readers remain conservative; `billingPhase` below is such an extension.
 
 ## Location and permissions
 
@@ -28,6 +28,8 @@ Kinds: `capture_started`, `call_started`, `observation`, `call_finished`, `captu
 
 - `call_started` / `observation` / `call_finished` share a random `callId` per **logical native-provider invocation** (not a physical HTTP attempt).
 - `observation.billing` is an array of scalar candidates, each with a `path` (the JSON path of the `total_nano_aiu` field): `{ path, nanoAiu: "<canonical integer string>", valueType: "string" | "number" }` for a valid amount, `{ path, invalid: true }` for a malformed one, or `{ path, missingAmount: true }` when a billing object lacked the field. Repeated or revised snapshots for one `callId` are **never summed**.
+- New `openai-completions` observations carry `billingPhase: "interim" | "final" | "unknown"` and `responseHash` (SHA-256 of `"pi-response-v2" + NUL + response ID`). A final chunk has one index-0 choice with `stop`, `length`, `tool_calls` or `function_call`, or empty `choices` with a usage object. The `object` and `type` markers may be absent; any supplied marker must equal `chat.completion.chunk`. Known phases normalize the receipt event type to `chat.completion.chunk` only for this API. Other shapes or conflicting markers are unknown; raw choices/finish reasons are not saved.
+- Once any observation has phase metadata, every observation in that call must have a recognized phase and the same valid response hash. A successful `call_finished` (`stop`, `length`, `toolUse`) and one distinct final amount are required. Only interim zero may differ from that amount; differing nonzero values, differing finals, invalid amounts and mixed/missing phase or identity evidence remain excluded. Entirely unphased calls retain the legacy one-distinct-amount rule. Older readers ignore this field and conservatively reject differing zero/final amounts; no historical receipts are rewritten.
 - `capture_started` carries `missedCalls` (calls skipped before this capture opened, e.g. lock contention). `capture_stopped`, `capture_checkpoint` and `capture_status` carry `inFlight`, `dropped`, `rawEvents`, `amountObservations`. Non-zero `missedCalls`, `dropped` or a stop with `inFlight > 0` mean incomplete evidence.
 - Never written: prompts, responses, thinking, tool data, headers, credentials, raw response IDs, absolute paths.
 

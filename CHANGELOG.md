@@ -7,6 +7,13 @@
 - Composer Auto-collapse: focus-out and idle collapse that keeps drafts.
 - Credits keep their unprefixed tags; the new plugins use `home-hero/` and `composer-autocollapse/` tag prefixes.
 
+## [0.3.3] — Unreleased (UAT)
+
+- Distinguish interim zero placeholders from final Pi Chat Completions billing; count the final amount once only with successful completion and matching response identity.
+- Recognize validated Pi Copilot Chat Completions chunks without `object`/`type` markers; reject explicitly conflicting markers and preserve unknown-shape exclusion.
+- Keep conflicting/invalid evidence excluded, legacy receipts conservative and coverage partial. No changes to Copilot CLI accounting.
+- Add offline native-SDK-to-host regression coverage for repeated zero chunks followed by 7.5669 AIC; update both BB and Pi components together.
+
 ## [0.3.2] — 2026-11-09
 
 - Show Copilot credits for the official registry provider `acp-github-copilot-cli` and the exact custom variants `acp-copilot-quiet` and `acp-copilot-fm`.

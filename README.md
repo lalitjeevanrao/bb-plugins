@@ -12,9 +12,10 @@ Three BB plugins, one repository, released independently.
 
 Requires **BB 0.49.0+** for Home Hero and Composer Auto-collapse, **BB 0.48.1+** for Copilot session credits. Tested on macOS.
 
+Copilot commands below use the latest published tag, v0.3.1. The v0.3.3 candidate is UAT-only: install both components at the separately supplied exact commit, not an unpublished tag.
 ```sh
 # Copilot session credits (also needs Pi 1.5.0+ for Pi coverage)
-bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.2 --plugin copilot-session-credits
+bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.1 --plugin copilot-session-credits
 
 # Home Hero
 bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@home-hero/v0.1.3 --plugin home-hero
@@ -25,7 +26,7 @@ bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@composer-
 
 Each plugin installs on its own: pick only the ones you want, and update or remove them separately. Use `bb plugin remove <id>` to uninstall.
 
-From a local clone, `bb plugin install . --plugin <name>` installs the same package the tagged release ships. On a second machine, [`docs/install-on-another-machine.sh`](docs/install-on-another-machine.sh) runs the three pinned installs (with the optional Pi companion commented out).
+From a local clone, `bb plugin install . --plugin <name>` installs the same package the tagged release ships.
 
 ## Releases
 

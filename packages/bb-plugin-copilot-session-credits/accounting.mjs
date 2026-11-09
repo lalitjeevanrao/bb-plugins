@@ -33,23 +33,36 @@ export function piUsage(records) {
     if (row.kind === 'call_started') {
       // Repeated starts are ambiguous, never silently merge independent invocations.
       if (calls.has(row.callId)) calls.get(row.callId).bad = true;
-      else calls.set(row.callId, { amounts: new Set(), done: false, bad: false });
+      else calls.set(row.callId, { amounts: new Set(), finalAmounts: new Set(), hashes: new Set(), phased: false, unphased: false, done: false, bad: false });
     }
     const call = calls.get(row.callId); if (!call) continue;
-    if (row.kind === 'call_finished') { if (call.done) call.bad = true; call.done = true; }
-    if (row.kind === 'observation') for (const value of row.billing ?? []) {
-      const n = digits(value.nanoAiu);
-      if (value.invalid || value.missingAmount || n === null) call.bad = true;
-      else call.amounts.add(n);
+    if (row.kind === 'call_finished') { if (call.done) call.bad = true; call.done = true; call.outcome = row.outcome; }
+    if (row.kind === 'observation') {
+      if (Object.hasOwn(row, 'billingPhase')) {
+        call.phased = true;
+        if (call.done || row.api !== 'openai-completions' || row.eventType !== 'chat.completion.chunk' || !['interim', 'final'].includes(row.billingPhase) || typeof row.responseHash !== 'string' || !/^[a-f0-9]{64}$/.test(row.responseHash)) call.bad = true;
+        call.hashes.add(row.responseHash);
+      } else call.unphased = true;
+      for (const value of row.billing ?? []) {
+        const n = digits(value.nanoAiu);
+        if (value.invalid || value.missingAmount || n === null) call.bad = true;
+        else {
+          call.amounts.add(n);
+          if (row.billingPhase === 'final') call.finalAmounts.add(n);
+        }
+      }
     }
   }
   let sum = 0n;
   for (const call of calls.values()) {
     result.observed++;
+    const amounts = call.phased ? call.finalAmounts : call.amounts;
+    // Only explicit interim zero placeholders may differ from the one final charge.
+    if (call.phased && (call.unphased || call.hashes.size !== 1 || [...call.amounts].some(n => n !== '0' && amounts.size && !amounts.has(n)))) call.bad = true;
     if (!call.done) result.inFlight++;
-    else if (call.bad || call.amounts.size > 1) result.conflicting++;
-    else if (!call.amounts.size) result.missing++;
-    else { sum += BigInt([...call.amounts][0]); result.reported++; }
+    else if (call.bad || amounts.size > 1) result.conflicting++;
+    else if (!amounts.size || (call.phased && !['stop', 'length', 'toolUse'].includes(call.outcome))) result.missing++;
+    else { sum += BigInt([...amounts][0]); result.reported++; }
   }
   if (result.reported) result.aic = nanoToAic(sum.toString());
   result.coverage = result.observed ? 'partial' : 'unavailable';

@@ -5,9 +5,13 @@
 
 ## Pi — "Observed subtotal"
 
-`piUsage(records)` counts a completed logical invocation (one `callId`) only when it has **exactly one distinct valid billing amount**:
+`piUsage(records)` counts a completed logical invocation (one `callId`) only when its billing evidence is unambiguous:
 
 - identical repeated snapshots for one call → counted once;
+- phase-aware Chat Completions: count one distinct final amount only after successful completion (`stop`, `length`, `toolUse`), with one response hash across all observations; ignore only interim zero placeholders;
+- missing/unknown/mixed phases or missing/changed response hashes → excluded; differing nonzero values, conflicting finals and invalid values still conflict;
+- interim-only values or unsuccessful completion → missing billing; a validated final zero is real;
+- entirely unphased legacy receipts keep the old one-distinct-amount rule; old zero/final disagreements cannot be safely repaired;
 - repeated starts/finishes → ambiguous, excluded;
 - conflicting or invalid values → excluded and counted;
 - completed without credits → excluded and counted;
