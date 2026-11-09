@@ -10,6 +10,7 @@
 ## [0.3.3] — Unreleased (UAT)
 
 - Distinguish interim zero placeholders from final Pi Chat Completions billing; count the final amount once only with successful completion and matching response identity.
+- Recognize validated Pi Copilot Chat Completions chunks without `object`/`type` markers; reject explicitly conflicting markers and preserve unknown-shape exclusion.
 - Keep conflicting/invalid evidence excluded, legacy receipts conservative and coverage partial. No changes to Copilot CLI accounting.
 - Add offline native-SDK-to-host regression coverage for repeated zero chunks followed by 7.5669 AIC; update both BB and Pi components together.
 

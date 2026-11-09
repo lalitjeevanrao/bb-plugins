@@ -26,7 +26,7 @@ const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManag
 const ai = [join(installed, 'node_modules/@earendil-works/pi-ai/dist/providers/all.js'), join(installed, '../pi-ai/dist/providers/all.js')].find(existsSync);
 const { builtinProviders } = await import(ai);
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'pi-probe-sdk-'))), results = [];
-let session, calls = 0, wrapped;
+let session, calls = 0, wrapped, markerless = false;
 const frame = data => `event: ${data.type ?? 'message'}\ndata: ${JSON.stringify(data)}\n\n`;
 try {
   const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false }, cacheWarming: { enabled: false } });
@@ -42,8 +42,8 @@ try {
     let body;
     if (api === 'openai-responses') body = frame({ type: 'response.created', response: { id: response.id } }) + frame({ type: 'response.completed', response, ...billing }) + 'data: [DONE]\n\n';
     if (api === 'openai-completions') {
-      const chunk = (amount, finish_reason) => ({ id: response.id, object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason }], copilot_usage: { total_nano_aiu: amount } });
-      body = [chunk('0', null), chunk('0', null), chunk('7566900000', 'stop')].map(data => 'data: ' + JSON.stringify(data) + '\n\n').join('') + 'data: [DONE]\n\n';
+      const chunk = (amount, finish_reason) => ({ id: response.id, ...(markerless ? {} : { object: 'chat.completion.chunk' }), choices: [{ index: 0, delta: {}, finish_reason }], usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 }, copilot_usage: { total_nano_aiu: amount } });
+      body = [chunk('0', markerless ? undefined : null), chunk('0', markerless ? undefined : null), chunk('7566900000', markerless ? 'tool_calls' : 'stop')].map(data => 'data: ' + JSON.stringify(data) + '\n\n').join('') + 'data: [DONE]\n\n';
     }
     if (api === 'anthropic-messages') body = frame({ type: 'message_start', message: { id: response.id, role: 'assistant', content: [], model: model.id, usage: { input_tokens: 2, output_tokens: 0 } } }) + frame({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { input_tokens: 2, output_tokens: 1 }, ...billing }) + frame({ type: 'message_stop' });
     return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
@@ -88,9 +88,10 @@ try {
   let bbProvider;
   createProbe({ directory, autoStart: true, provider: fixture })({ on: (name, run) => hooks.set(name, run), registerCommand() {}, registerProvider: value => { bbProvider = value; } });
   hooks.get('session_start')({ reason: 'startup' }, { sessionManager: { getSessionId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', getSessionFile: () => join(root, providerSession + '.jsonl') } });
+  markerless = true;
   const bbStream = bbProvider.stream({ ...model, api: 'openai-completions' }, context, {});
   for await (const event of bbStream) assert.notEqual(event.type, 'error');
-  assert.equal((await bbStream.result()).stopReason, 'stop'); await Promise.resolve();
+  assert.equal((await bbStream.result()).stopReason, 'toolUse'); await Promise.resolve();
   const { createHostEntry } = await import('../../dist/host.js');
   const { experimental_createHostEntryHarness } = await import('@get-bb/plugin-sdk/testing/host');
   const host = experimental_createHostEntryHarness(createHostEntry([directory], join(root, 'unused-cli'), join(root, 'unused-status')));
