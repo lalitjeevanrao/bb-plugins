@@ -38,7 +38,7 @@ await test('CLI provider aliases route exact latest identity to environment host
   const other='99999999-9999-4999-8999-999999999999';
   mkdirSync(join(cli,other),{mode:0o700});
   writeFileSync(join(cli,other,'events.jsonl'),JSON.stringify({type:'session.usage_checkpoint',data:{totalNanoAiu:'99000000000'}})+'\n');
-  for(const provider of ['acp-copilot','acp-gh-copilot','acp-github-copilot-cli']){
+  for(const provider of ['acp-copilot','acp-gh-copilot','acp-github-copilot-cli','acp-copilot-quiet','acp-copilot-fm']){
     const host=experimental_createHostEntryHarness(createHostEntry([pi],cli));
     const calls=[];
     const {bb,harness}=createFakePluginHost({pluginId:'copilot-session-credits',sdk:{threads:{
@@ -74,7 +74,17 @@ await test('Identity pending Pi remains read-only and gives setup context before
 });
 await test('Collector full reason preserves old subtotal and never recommends reload',async()=>{save(rows);for(let i=0;i<255;i++)writeFileSync(join(pi,'closed-'+i),'');try{const r=await read('pi',providerId);assert.equal(r.aic,'1.23456789');assert.equal(r.captureIssue,true);assert.match(r.reason,/Collector full/);assert(!r.reason.includes('reload'));assert(r.reason.length<=300);}finally{for(let i=0;i<255;i++)rmSync(join(pi,'closed-'+i));}});
 await test('Busy and old allocation locks have explicit safe reasons without removing evidence',async()=>{const lock=join(pi,'.capture-lock');mkdirSync(lock,{mode:0o700});try{assert.match((await read('pi',providerId)).reason,/allocation is busy/);const past=new Date(Date.now()-120000);utimesSync(lock,past,past);const r=await read('pi',providerId);assert.match(r.reason,/over 60 seconds old/);assert.equal(r.captureIssue,true);assert(!r.reason.includes('reload'));assert(r.reason.length<=300);}finally{rmSync(lock,{recursive:true});}});
-await test('Unsupported harness never queries identity or billing host',async()=>{const {bb,harness}=createFakePluginHost({pluginId:'copilot-session-credits',sdk:{threads:{get:async()=>makeThreadResponse({providerId:'acp-claude'})}}});plugin(bb);const r=await harness.behavior.callRpc('usage',{threadId:'thr_fixture'});assert.equal(r.provider,'acp-claude');assert.equal(r.aic,null);assert.equal(harness.inspection.sdk.callsTo('threads.events.list').length,0);await harness.lifecycle.dispose();});
+await test('Unsupported harnesses never query identity or billing host',async()=>{
+  for(const provider of ['acp-claude','acp','acp-copilot-other','acp-gh-copilot-other','acp-copilot-quiet-other']){
+    let calls=0;
+    const {bb,harness}=createFakePluginHost({pluginId:'copilot-session-credits',sdk:{threads:{get:async()=>makeThreadResponse({providerId:provider})}},experimental_callHostRpc:async()=>{calls++;throw Error('Unsupported provider must not read host');}});
+    try{
+      plugin(bb);const r=await harness.behavior.callRpc('usage',{threadId:'thr_fixture'});
+      assert.equal(r.provider,provider);assert.equal(r.aic,null);
+      assert.equal(harness.inspection.sdk.callsTo('threads.events.list').length,0);assert.equal(calls,0);
+    }finally{await harness.lifecycle.dispose();}
+  }
+});
 await test('Truncation and stopped unfinished calls expose recording gaps independently of coverage',async()=>{for(const extra of [{kind:'capture_truncated'},{kind:'capture_stopped',inFlight:1}]){save([...rows,{...rows[0],seq:5,...extra}]);const r=await read('pi',providerId);assert.equal(r.aic,'1.23456789');assert.equal(r.captureIssue,true);assert.equal(r.coverage,'partial');}save(rows);assert.equal((await read('pi',providerId)).captureIssue,false);});
 await test('Combined full, stale lock and damaged receipts preserve subtotal and bounded diagnostics',async()=>{
   save(rows);

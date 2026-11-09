@@ -9,7 +9,7 @@ export default function plugin(bb: BbPluginApi) {
       try {
         const thread = await bb.sdk.threads.get({ threadId, include: "environment" });
         provider = thread.providerId;
-        if (!["pi", "acp-copilot", "acp-gh-copilot", "acp-github-copilot-cli"].includes(provider)) return result(emptyUsage("Provider does not expose Copilot session credits"));
+        if (!["pi", "acp-copilot", "acp-gh-copilot", "acp-github-copilot-cli", "acp-copilot-quiet", "acp-copilot-fm"].includes(provider)) return result(emptyUsage("Provider does not expose Copilot session credits"));
         const environment = "environment" in thread ? thread.environment : null;
         if (!environment?.hostId) return result(emptyUsage("Environment host unavailable.", ["host-unavailable"]));
         // Identity-only query: never fetch prompts, assistant messages or tool output.

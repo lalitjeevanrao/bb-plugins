@@ -1,6 +1,6 @@
 # Release checklist
 
-The current release is v0.3.1 (follows the v0.3.0 breaking canonical plugin ID rename). The implementation uses released BB APIs and requires no BB core feature approval. Copilot CLI works from the BB installation; Pi requires its separately installed companion and an authenticated Pi 1.5.0+ runtime.
+The current release is v0.3.2 (follows the v0.3.0 breaking canonical plugin ID rename). The implementation uses released BB APIs and requires no BB core feature approval. Copilot CLI works from the BB installation; Pi requires its separately installed companion and an authenticated Pi 1.5.0+ runtime.
 
 ## Validate the source
 
@@ -11,7 +11,7 @@ The current release is v0.3.1 (follows the v0.3.0 breaking canonical plugin ID r
 
 ## Publish the Git release
 
-Destination: public `lalitjeevanrao/bb-plugins` (renamed from `copilot-session-credits`; old URLs redirect); root Pi package and `packages/bb-plugin-copilot-session-credits` share v0.3.1. Credits keep the unprefixed `vX.Y.Z` tags, so existing pinned sources keep resolving to the same commits after the repository rename. Leave npm `private: true`; no npm/PyPI publication is needed.
+Destination: public `lalitjeevanrao/bb-plugins` (renamed from `copilot-session-credits`; old URLs redirect); root Pi package and `packages/bb-plugin-copilot-session-credits` share v0.3.2. Credits keep the unprefixed `vX.Y.Z` tags, so existing pinned sources keep resolving to the same commits after the repository rename. Leave npm `private: true`; no npm/PyPI publication is needed.
 
 Release from `main`, which contains the public history. Never merge or push the private `implementation/monorepo` branch: it contains historical screenshots excluded from publication. Exclude dependencies, build output and local review artifacts.
 
@@ -45,6 +45,6 @@ The listing must disclose authenticated Copilot access, Pi's separate companion 
 
 Run `npm ci --ignore-scripts`, `npm run build`, `npm test`, `npm run gate:v1`, and `npm run check`. The final check resolves public sources and therefore needs the release to exist. Commit only entry/icon/overview/referenced screenshots. Open the marketplace PR with source/range, validation, requirements, screenshot descriptions and overview provenance. Report the PR URL and state accurately; submission is complete when opened and validated, while listing availability requires maintainer merge.
 
-Use PR title **Add plugin entry: copilot-session-credits**. Include the immutable v0.3.1 tag and its exact released commit once known; do not submit invented provenance. The listing hook is **Track reported GitHub Copilot credit usage for each BB thread.** Keep the Pi partial-coverage caveat. Open the overview with source/coverage differences rather than repeating this hook.
+Use PR title **Add plugin entry: copilot-session-credits**. Include the immutable v0.3.2 tag and its exact released commit once known; do not submit invented provenance. The listing hook is **Track reported GitHub Copilot credit usage for each BB thread.** Keep the Pi partial-coverage caveat. Open the overview with source/coverage differences rather than repeating this hook.
 
 The PR body must disclose that BB plugins run with full trust/user permissions and state the factual data boundary: thread/provider identity, Copilot CLI usage checkpoints and Pi usage receipts/status; no prompt, response or credential collection and no analytics endpoint. Disclose the bounded local CLI log-tail read described in SECURITY.md. Validate against the current marketplace schema and range `^0.3.0` after the tag is published.

@@ -63,7 +63,14 @@ for (const [name, check] of [
   ['Toolbar action has one compact fallback and no BB popup', () => { assert.equal(spec.actions?.length, 1); assert.equal(spec.experimental_popups, undefined); assert.equal(spec.scopes.join(','), 'thread'); reset(); assert.equal(render('banners'), ''); }],
   ['Recorded Pi spend stays visible when picker selects unsupported harness', () => { reset({ selection: { providerId: 'acp-claude', model: 'some-model' } }); const html = render('actions'); assert.match(html, /Recorded/); assert.match(html, /1\.2500/); }],
   ['Recorded Pi spend stays visible when picker selects non-Copilot model', () => { reset({ selection: { providerId: 'pi', model: 'anthropic/some-model' } }); assert.match(render('actions'), /1\.2500/); assert.match(render('panel'), /Partial coverage./); }],
-  ['Actual unsupported session stays hidden regardless of supported picker', () => { reset({ provider: 'acp-claude', selection: { providerId: 'pi', model: 'github-copilot/test' } }); assert.doesNotMatch(render('actions'), /data-testid="copilot-session-credit-meter"/); reset({ provider: 'acp-claude', layout: 'compact' }); assert.doesNotMatch(render('banners'), /data-testid="copilot-session-credit-meter"/); }],
+  ['Actual unsupported sessions stay hidden regardless of supported picker', () => {
+    for (const provider of ['acp-claude', 'acp', 'acp-copilot-other', 'acp-gh-copilot-other', 'acp-copilot-quiet-other']) {
+      for (const layout of ['expanded', 'compact']) {
+        reset({ provider, layout, selection: { providerId: 'pi', model: 'github-copilot/test' } });
+        assert.doesNotMatch(render(layout === 'compact' ? 'banners' : 'actions'), /data-testid="copilot-session-credit-meter"/);
+      }
+    }
+  }],
   ['Compact layout has one fallback and no action; expanded has action only', () => { reset({ layout: 'compact' }); assert.match(render('banners'), /1\.2500/); assert.equal(render('actions'), ''); reset(); assert.match(render('actions'), /1\.2500/); assert.equal(render('banners'), ''); }],
   ['Context-row portal is used when anchor exists; missing anchor falls back locally', () => { reset(); assert.match(render('actions'), /data-placement="info-row"/); reset({ target: null }); assert.match(render('actions'), /data-placement="toolbar"/); reset({ layout: 'compact', target: null }); assert.match(render('banners'), /data-placement="compact"/); }],
   ['Trigger is an accessible non-submit popover button', () => { reset(); const html = render('actions'); assert.match(html, /type="button"/); assert.match(html, /aria-haspopup="dialog"/); assert.match(html, /aria-label="[^"]*1\.2500 AIC[^"]*Recorded/); context.buttons[0].onClick(); assert(context.popOpen); }],
@@ -71,7 +78,7 @@ for (const [name, check] of [
   ['Recording state and disconnection remain truthful', () => { for (const [usage, label] of [[{ inFlight: 1 }, 'Updating'], [{ missing: 1 }, 'Missing data'], [{ aic: null }, 'Unavailable']]) { reset({ usage }); assert(render('actions').includes(label)); } reset({ connection: 'reconnecting' }); assert.match(render('actions'), /Recorded/); }],
   ['Another thread snapshot never appears in new toolbar or popup', () => { reset({ snapshotThread: 'thr_other' }); assert.doesNotMatch(render('actions'), /1\.2500/); assert.doesNotMatch(render('panel'), /1\.25 AIC/); }],
   ['Copilot CLI providers show cumulative usage in expanded and compact layouts', () => {
-    for (const provider of ['acp-copilot', 'acp-gh-copilot', 'acp-github-copilot-cli']) {
+    for (const provider of ['acp-copilot', 'acp-gh-copilot', 'acp-github-copilot-cli', 'acp-copilot-quiet', 'acp-copilot-fm']) {
       for (const layout of ['expanded', 'compact']) {
         reset({ provider, layout, target: null, usage: { source: 'copilot-checkpoint', aic: '16.08247355', coverage: 'complete' } });
         const region = layout === 'compact' ? 'banners' : 'actions';

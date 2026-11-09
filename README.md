@@ -14,7 +14,7 @@ Requires **BB 0.49.0+** for Home Hero and Composer Auto-collapse, **BB 0.48.1+**
 
 ```sh
 # Copilot session credits (also needs Pi 1.5.0+ for Pi coverage)
-bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.1 --plugin copilot-session-credits
+bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@v0.3.2 --plugin copilot-session-credits
 
 # Home Hero
 bb plugin install git:https://github.com/lalitjeevanrao/bb-plugins.git@home-hero/v0.1.3 --plugin home-hero
