@@ -27,6 +27,15 @@ export function observeBilling(data) {
   });
 }
 
+// Retain only phase evidence, never the raw chunk or finish reason.
+function chatBillingPhase(data) {
+  if ((data.object !== 'chat.completion.chunk' && data.type !== 'chat.completion.chunk') || !Array.isArray(data.choices)) return 'unknown';
+  if (!data.choices.length) return recordObject(data.usage) ? 'final' : 'unknown';
+  const choice = data.choices[0];
+  if (data.choices.length !== 1 || !recordObject(choice) || choice.index !== 0) return 'unknown';
+  if (choice.finish_reason == null) return 'interim';
+  return ['stop', 'length', 'tool_calls', 'function_call'].includes(choice.finish_reason) ? 'final' : 'unknown';
+}
 // All schema-3 writers reserve files under the same atomic mkdir lock. No evidence is deleted.
 function openCapture(directory, epoch, maxFiles) {
   if (realpathSync(dirname(directory)) !== dirname(directory)) throw new Error('Canonical parent required');
@@ -120,7 +129,7 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
           amountObservations += billing.filter(value => Object.hasOwn(value, 'nanoAiu')).length;
           if (billing.length || TERMINAL.has(eventType) || data.choices?.some?.(choice => choice.finish_reason != null)) {
             const responseId = data.response?.id ?? data.message?.id ?? data.id;
-            write('observation', { callId, provider: 'github-copilot', api: model.api, model: safeLabel(model.id), eventType, responseHash: typeof responseId === 'string' && responseId.length <= 512 ? hash('pi-response-v2', responseId) : null, billing });
+            write('observation', { callId, provider: 'github-copilot', api: model.api, model: safeLabel(model.id), eventType, responseHash: typeof responseId === 'string' && responseId.length > 0 && responseId.length <= 512 ? hash('pi-response-v2', responseId) : null, ...(model.api === 'openai-completions' ? { billingPhase: chatBillingPhase(data) } : {}), billing });
           }
         }
       };

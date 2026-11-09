@@ -18,12 +18,12 @@ if (!process.argv.includes('--isolated')) {
   const {DefaultResourceLoader,SettingsManager}=await import(pathToFileURL(join(runtime.root,'dist/index.js')));
   const {parseGitUrl}=await import(pathToFileURL(join(runtime.root,'dist/utils/git.js')));
   const source=piInstallCommand.slice('pi install '.length),parsed=parseGitUrl(source);
-  assert.equal(parsed.ref,'v0.3.2');assert.equal(parsed.host,'github.com');
+  assert.equal(parsed.ref,'v0.3.1');assert.equal(parsed.host,'github.com');
   const fixture=join(root,'git source'),prefix=join(fixture,'packages/bb-plugin-copilot-session-credits');mkdirSync(prefix,{recursive:true});
   copyFileSync(new URL('../../../package.json',import.meta.url),join(fixture,'package.json'));
   cpSync(new URL('../collector',import.meta.url),join(prefix,'collector'),{recursive:true});
   const git=(...args)=>execFileSync('git',['-C',fixture,...args],{encoding:'utf8',env:{...process.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:join(root,'empty-config')}});
-  git('init','--quiet');git('add','.');git('-c','user.name=Package test','-c','user.email=test@example.invalid','commit','--quiet','--no-verify','-m','synthetic package fixture');git('tag','v0.3.2');
+  git('init','--quiet');git('add','.');git('-c','user.name=Package test','-c','user.email=test@example.invalid','commit','--quiet','--no-verify','-m','synthetic package fixture');git('tag','v0.3.1');
   const config=join(root,'gitconfig');writeFileSync(config,`[url "${pathToFileURL(fixture).href}"]\n  insteadOf = ${parsed.repo}\n[protocol "https"]\n  allow = never\n[protocol "file"]\n  allow = always\n`);
   const env={...process.env,GIT_CONFIG_GLOBAL:config,GIT_CONFIG_NOSYSTEM:'1',GIT_TERMINAL_PROMPT:'0',npm_config_offline:'true'};
   const cli=join(runtime.root,'dist/cli.js');assert(existsSync(cli));

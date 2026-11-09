@@ -12,6 +12,42 @@ test('Duplicate snapshots count once, separate interleaved calls add',()=>{const
 test('Conflicting, missing, unfinished and invalid amounts excluded explicitly',()=>{const r=piUsage([start(1),obs(1,'1'),obs(1,'2'),end(1),start(2),end(2),start(3),obs(3,'1'),start(4),obs(4,'-1'),end(4)]);assert.equal(r.aic,null);assert.equal(r.conflicting,2);assert.equal(r.missing,1);assert.equal(r.inFlight,1);});
 test('Duplicate call lifecycle is ambiguous, not double counted',()=>{assert.equal(piUsage([start(1),obs(1,'1000000000'),end(1),start(1),end(1)]).aic,null);});
 test('Observed true zero distinct from no receipts',()=>{assert.equal(piUsage([]).aic,null);assert.equal(piUsage([start(1),obs(1,'0'),end(1)]).aic,'0');});
+const phased = (n, value, billingPhase = 'final', extra = {}) => ({ ...obs(n, value), api: 'openai-completions', eventType: 'chat.completion.chunk', responseHash: 'a'.repeat(64), billingPhase, ...extra });
+const finished = (n, outcome = 'stop') => ({ ...end(n), outcome });
+test('Chat interim zero then repeated final charge counts once with partial coverage', () => {
+  const r = piUsage([start(1), phased(1, '0', 'interim'), phased(1, '0', 'interim'), phased(1, '7566900000'), phased(1, '7566900000'), finished(1)]);
+  assert.equal(r.aic, '7.5669'); assert.equal(r.reported, 1); assert.equal(r.conflicting, 0); assert.equal(r.coverage, 'partial');
+});
+test('Chat final zero is real, but interim-only zero is missing billing', () => {
+  assert.equal(piUsage([start(1), phased(1, '0'), finished(1)]).aic, '0');
+  const r = piUsage([start(1), phased(1, '0', 'interim'), finished(1)]);
+  assert.equal(r.aic, null); assert.equal(r.missing, 1);
+});
+test('Chat contradictory finals, invalid values and changed response identities stay conflicting', () => {
+  for (const extra of [phased(1, '1'), phased(1, '0'), phased(1, '-1'), phased(1, '7', 'interim'), phased(1, '7566900000', 'final', { responseHash: 'b'.repeat(64) }), phased(1, '0', 'interim', { responseHash: null }), phased(1, '0', 'unknown'), obs(1, '0')]) {
+    const r = piUsage([start(1), extra, phased(1, '7566900000'), finished(1)]);
+    assert.equal(r.aic, null); assert.equal(r.conflicting, 1);
+  }
+});
+test('Chat malformed hash types cannot establish a final charge', () => {
+  for (const responseHash of [['a'.repeat(64)], null, 123, {}]) {
+    const r = piUsage([start(1), phased(1, '7566900000', 'final', { responseHash }), finished(1)]);
+    assert.equal(r.aic, null); assert.equal(r.conflicting, 1);
+  }
+});
+test('Chat unsuccessful or unfinished calls never gain a final subtotal', () => {
+  for (const outcome of ['error', 'aborted', 'threw', 'rejected', 'unknown']) {
+    const r = piUsage([start(1), phased(1, '0', 'interim'), phased(1, '7566900000'), finished(1, outcome)]);
+    assert.equal(r.aic, null); assert.equal(r.missing, 1);
+  }
+  const r = piUsage([start(1), phased(1, '7566900000')]); assert.equal(r.aic, null); assert.equal(r.inFlight, 1);
+});
+test('Phase-aware concurrent calls remain separate and legacy zero/final receipts remain uncertain', () => {
+  const r = piUsage([start(1), start(2), phased(1, '0', 'interim'), phased(2, '0', 'interim'), phased(1, '7566900000'), phased(2, '1000000000'), finished(2, 'toolUse'), finished(1, 'length')]);
+  assert.equal(r.aic, '8.5669'); assert.equal(r.reported, 2);
+  const legacy = piUsage([start(1), obs(1, '0'), obs(1, '7566900000'), finished(1)]);
+  assert.equal(legacy.aic, null); assert.equal(legacy.conflicting, 1);
+});
 test('CLI snapshot replaces earlier totals; nested coverage honored',()=>{const c=cliUsage({data:{totalNanoAiu:'16082473550',accountingSnapshot:{aiCreditsStatus:'partial'}}});assert.equal(c.aic,'16.08247355');assert.equal(c.coverage,'partial');});
 test('CLI unavailable and legacy zero never imply free, explicit complete zero allowed',()=>{assert.equal(cliUsage({data:{totalNanoAiu:0,accountingSnapshot:{aiCreditsStatus:'unavailable'}}}).aic,null);assert.equal(cliUsage({data:{totalNanoAiu:0}}).aic,null);assert.equal(cliUsage({data:{totalNanoAiu:0,accountingSnapshot:{aiCreditsStatus:'complete'}}}).aic,'0');});
 test('Fresh Pi recorded amount clears badge without claiming complete billing coverage',()=>{const r=piUsage([start(1),obs(1,'1000000000'),end(1)]);assert.equal(r.coverage,'partial');assert.equal(meterState(r),'Recorded');});

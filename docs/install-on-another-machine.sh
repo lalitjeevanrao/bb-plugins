@@ -14,8 +14,8 @@ command -v bb >/dev/null 2>&1 || {
   exit 1
 }
 
-echo "==> Copilot session credits (v0.3.2)"
-bb plugin install "git:${REPO_URL}@v0.3.2" --plugin copilot-session-credits
+echo "==> Copilot session credits (v0.3.1)"
+bb plugin install "git:${REPO_URL}@v0.3.1" --plugin copilot-session-credits
 
 echo "==> Home Hero (home-hero/v0.1.3)"
 bb plugin install "git:${REPO_URL}@home-hero/v0.1.3" --plugin home-hero
@@ -28,4 +28,4 @@ echo "==> Done. Verify with: bb plugin list"
 # Optional: the Pi companion from the same repository (skip if you do not use Pi).
 # Requires Pi 1.5.0 or newer. It shares the credits tag, so no extra prefix.
 #
-# pi install "git:${REPO_URL}@v0.3.2"
+# pi install "git:${REPO_URL}@v0.3.1"
