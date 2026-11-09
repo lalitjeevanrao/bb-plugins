@@ -8,7 +8,7 @@ import { displayAic } from "./accounting.mjs";
 import { creditDetails } from "./details-copy.mjs";
 import { piInstallCommand, copyPiInstallCommand } from "./setup-copy.mjs";
 import "./meter.css";
-const supported = (provider: string) => ["pi", "acp-copilot", "acp-gh-copilot"].includes(provider);
+const supported = (provider: string) => ["pi", "acp-copilot", "acp-gh-copilot", "acp-github-copilot-cli"].includes(provider);
 function useSessionCredits() {
   const view = useComposer(), threadId = view.scope.kind === "thread" ? view.scope.threadId : null;
   const selectedProvider = view.selection?.providerId, selectedModel = view.selection?.model;

@@ -34,6 +34,38 @@ await test('Legacy and new receipt roots are both read without changing existing
 await test('Sequence damage, symlink and mixed native identities fail closed',async()=>{save(rows.map((r,i)=>i===2?{...r,seq:99}:r));assert.equal((await read('pi',providerId)).aic,null);rmSync(file);const target=join(root,'target');writeFileSync(target,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');symlinkSync(target,file);assert.equal((await read('pi',providerId)).aic,null);rmSync(file);save(rows);const other='55555555-5555-4555-8555-555555555555';writeFileSync(join(pi,other+'.jsonl'),rows.map(r=>JSON.stringify({...r,epoch:other,nativeSessionHash:'b'.repeat(64)})).join('\n')+'\n',{mode:0o600});assert.equal((await read('pi',providerId)).aic,null);rmSync(join(pi,other+'.jsonl'));});
 await test('CLI latest cumulative checkpoint replaces prior and honors partial coverage',async()=>{mkdirSync(join(cli,uuid),{mode:0o700});writeFileSync(join(cli,uuid,'events.jsonl'),[{type:'user.message',data:{content:'PRIVATE_CANARY'}},{type:'session.usage_checkpoint',data:{totalNanoAiu:'1000000000'}},{type:'session.usage_checkpoint',data:{totalNanoAiu:'2000000000',accountingSnapshot:{aiCreditsStatus:'partial'}}}].map(r=>JSON.stringify(r)).join('\n')+'\n');const r=await read('copilot',uuid);assert.equal(r.aic,'2');assert.equal(r.coverage,'partial');assert(!JSON.stringify(r).includes('PRIVATE_CANARY'));});
 await test('Host RPC rejects traversal and provider/session mismatch',async()=>{const h=experimental_createHostEntryHarness(createHostEntry([pi],cli));await assert.rejects(h.experimental_call('read',{provider:'pi',sessionId:'../../other'}));await h.experimental_dispose();assert.equal((await read('copilot',providerId)).aic,null);});
+await test('CLI provider aliases route exact latest identity to environment host and real checkpoint reader',async()=>{
+  const other='99999999-9999-4999-8999-999999999999';
+  mkdirSync(join(cli,other),{mode:0o700});
+  writeFileSync(join(cli,other,'events.jsonl'),JSON.stringify({type:'session.usage_checkpoint',data:{totalNanoAiu:'99000000000'}})+'\n');
+  for(const provider of ['acp-copilot','acp-gh-copilot','acp-github-copilot-cli']){
+    const host=experimental_createHostEntryHarness(createHostEntry([pi],cli));
+    const calls=[];
+    const {bb,harness}=createFakePluginHost({pluginId:'copilot-session-credits',sdk:{threads:{
+      get:async()=>({...makeThreadResponse({providerId:provider}),environment:{hostId:'host_cli_fixture'}}),
+      events:{list:async()=>[
+        {type:'thread/identity',seq:8,data:{providerThreadId:uuid}},
+        {type:'thread/identity',seq:7,data:{providerThreadId:other}}
+      ]}
+    }},experimental_callHostRpc:async args=>{
+      calls.push(args);
+      assert.equal(args.hostId,'host_cli_fixture');
+      assert.equal(args.method,'read');
+      assert.deepEqual(args.input,{provider:'copilot',sessionId:uuid});
+      return host.experimental_call(args.method,args.input);
+    }});
+    try{
+      plugin(bb);
+      const r=await harness.behavior.callRpc('usage',{threadId:'thr_cli_fixture'});
+      assert.equal(calls.length,1);
+      assert.equal(r.provider,provider);assert.equal(r.sessionId,uuid);
+      assert.equal(r.aic,'2');assert.equal(r.source,'copilot-checkpoint');assert.equal(r.coverage,'partial');
+      assert(!JSON.stringify(r).includes('PRIVATE_CANARY'));
+      const query=harness.inspection.sdk.callsTo('threads.events.list')[0];
+      assert(query);
+    }finally{await harness.lifecycle.dispose();await host.experimental_dispose();}
+  }
+});
 await test('Server routes identity-only request to exact environment host',async()=>{let target;const {bb,harness}=createFakePluginHost({pluginId:'copilot-session-credits',sdk:{threads:{get:async()=>({...makeThreadResponse({providerId:'pi'}),environment:{hostId:'host_fixture'}}),events:{list:async()=>[{type:'thread/identity',seq:7,data:{providerThreadId:providerId}}]}}},experimental_callHostRpc:async args=>{target=args;return {aic:'1',coverage:'partial',source:'pi-receipts',reported:1,observed:1,inFlight:0,conflicting:0,missing:0,updatedAt:null,reason:'fixture'};}});plugin(bb);const r=await harness.behavior.callRpc('usage',{threadId:'thr_fixture'});assert.equal(r.aic,'1');assert.equal(target.hostId,'host_fixture');assert.equal(target.input.sessionId,providerId);const events=harness.inspection.sdk.callsTo('threads.events.list')[0];assert(events);await harness.lifecycle.dispose();});
 await test('Identity pending Pi remains read-only and gives setup context before any call',async()=>{
   let calls=0;

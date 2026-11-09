@@ -70,7 +70,20 @@ for (const [name, check] of [
   ['Popup keeps exact amount in collapsed details, short scope, coverage and popover close', () => { reset({ usage: { aic: '1.250000001', updatedAt: '2026-11-05T00:00:00Z' } }); const html = render('panel'); for (const text of ['1.250000001 AIC', 'Recorded', 'Partial coverage.', 'Other BB threads separate.', 'Pi', '<summary>Details</summary>', 'Not an invoice.']) assert(html.includes(text), text); assert.match(html, /<details[^>]*>.*1\.250000001 AIC/s); assert.doesNotMatch(html, /<details[^>]*open|Badge shows|Recorded =|Parent and child|No token-price/); context.buttons.find(button => button['aria-label'] === 'Close credit details').onClick(); assert.equal(context.closed, 1); }],
   ['Recording state and disconnection remain truthful', () => { for (const [usage, label] of [[{ inFlight: 1 }, 'Updating'], [{ missing: 1 }, 'Missing data'], [{ aic: null }, 'Unavailable']]) { reset({ usage }); assert(render('actions').includes(label)); } reset({ connection: 'reconnecting' }); assert.match(render('actions'), /Recorded/); }],
   ['Another thread snapshot never appears in new toolbar or popup', () => { reset({ snapshotThread: 'thr_other' }); assert.doesNotMatch(render('actions'), /1\.2500/); assert.doesNotMatch(render('panel'), /1\.25 AIC/); }],
-  ['Copilot CLI uses same toolbar and full cumulative checkpoint amount', () => { reset({ provider: 'acp-gh-copilot', usage: { source: 'copilot-checkpoint', aic: '16.08247355', coverage: 'complete' } }); assert.match(render('actions'), /16\.0825/); assert.match(render('panel'), /16\.08247355 AIC/); assert.match(render('panel'), /Copilot CLI/); }],
+  ['Copilot CLI providers show cumulative usage in expanded and compact layouts', () => {
+    for (const provider of ['acp-copilot', 'acp-gh-copilot', 'acp-github-copilot-cli']) {
+      for (const layout of ['expanded', 'compact']) {
+        reset({ provider, layout, target: null, usage: { source: 'copilot-checkpoint', aic: '16.08247355', coverage: 'complete' } });
+        const region = layout === 'compact' ? 'banners' : 'actions';
+        assert.match(render(region), /data-testid="copilot-session-credit-meter"/);
+        assert.match(render(region), /16\.0825/);
+        assert.equal(render(layout === 'compact' ? 'actions' : 'banners'), '');
+        assert.match(render('panel'), /16\.08247355 AIC/);
+        assert.match(render('panel'), /Copilot CLI/);
+        assert.doesNotMatch(render('panel'), /Set up Pi credits/);
+      }
+    }
+  }],
   ['Unfinished does not claim a running call; warning states retain accepted subtotal', () => {
     reset({ usage: { inFlight: 1 } });let html=render('panel');
     assert.match(html,/1 call unfinished\. Not counted yet\./);assert.match(html,/data-tone="info"/);assert.doesNotMatch(html,/still running/);
