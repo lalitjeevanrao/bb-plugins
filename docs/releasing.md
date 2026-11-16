@@ -1,6 +1,6 @@
 # Release checklist
 
-The next release candidate is v0.3.3 (UAT only; not tagged) (follows the v0.3.0 breaking canonical plugin ID rename). The implementation uses released BB APIs and requires no BB core feature approval. Copilot CLI works from the BB installation; Pi requires its separately installed companion and an authenticated Pi 1.5.0+ runtime.
+The latest credits release is v0.3.4 (follows the v0.3.0 breaking canonical plugin ID rename). The implementation uses released BB APIs and requires no BB core feature approval. Copilot CLI works from the BB installation; Pi requires its separately installed companion and an authenticated Pi 1.5.0+ runtime.
 
 ## Validate the source
 
@@ -11,7 +11,7 @@ The next release candidate is v0.3.3 (UAT only; not tagged) (follows the v0.3.0 
 
 ## Publish the Git release
 
-Destination: public `lalitjeevanrao/bb-plugins` (renamed from `copilot-session-credits`; old URLs redirect); root Pi package and `packages/bb-plugin-copilot-session-credits` share v0.3.3. Credits keep the unprefixed `vX.Y.Z` tags, so existing pinned sources keep resolving to the same commits after the repository rename. Leave npm `private: true`; no npm/PyPI publication is needed.
+Destination: public `lalitjeevanrao/bb-plugins` (renamed from `copilot-session-credits`; old URLs redirect); root Pi package and `packages/bb-plugin-copilot-session-credits` share one version (currently v0.3.4). Credits keep the unprefixed `vX.Y.Z` tags, so existing pinned sources keep resolving to the same commits after the repository rename. Leave npm `private: true`; no npm/PyPI publication is needed.
 
 Release from `main`, which contains the public history. Never merge or push the private `implementation/monorepo` branch: it contains historical screenshots excluded from publication. Exclude dependencies, build output and local review artifacts.
 
