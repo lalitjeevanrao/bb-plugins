@@ -2,8 +2,9 @@ import { experimental_defineHostEntry } from "@get-bb/plugin-sdk";
 import { constants } from "node:fs";
 import { open, lstat, realpath, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { hostContract, emptyUsage, readinessSchema, type Usage } from "./contract";
+import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { hostContract, emptyUsage, readinessSchema, isPiSession, type Usage } from "./contract";
 import { readReadiness } from "./collector/readiness.mjs";
 import { piUsage, cliUsage } from "./accounting.mjs";
 
@@ -40,12 +41,27 @@ async function privateDirectory(path: string, privateMode = false) {
   if (!stat.isDirectory() || stat.isSymbolicLink() || await realpath(path) !== path || (process.getuid && stat.uid !== process.getuid())) throw Error("unsafe-directory");
   if (privateMode && (stat.mode & 0o077)) throw Error("non-private-directory");
 }
-async function readPi(sessionId: string, piRoots: string[]) {
+const defaultBridgeDir = () => { const custom = process.env.BB_PI_BRIDGE_SESSION_DIR?.trim(); return custom ? resolve(custom) : join(homedir(), ".bb", "pi-bridge-sessions"); };
+const nativeHash = (id: string) => createHash("sha256").update("pi-session-v2\0" + id.toLowerCase()).digest("hex");
+const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+// Receipts written before 0.3.4 carry `providerSession: null` for `thr_<id>` sessions. Recover them only by the
+// native session hash of that exact BB bridge file header; prompts and messages are never read (4 KiB head only).
+async function bridgeHash(bridgeDir: string | null, session: string) {
+  if (!bridgeDir || !session.startsWith("thr_")) return null;
+  try {
+    await privateDirectory(bridgeDir);
+    const [line] = await safeFile(join(bridgeDir, session + ".jsonl"), 4096, { head: true });
+    const header = JSON.parse(line ?? "null");
+    return header?.type === "session" && typeof header.id === "string" && UUID.test(header.id) ? nativeHash(header.id) : null;
+  } catch { return null; }
+}
+async function readPi(sessions: string[], piRoots: string[], bridgeDir: string | null) {
   const records: any[] = [];
   let damaged = false, budget = 8388608;
   const health: string[] = [];
   const issues: Usage["issues"] = [];
-  const hashes = new Set<string>();
+  const wanted = new Set(sessions), hashes = new Map<string, Set<string>>(), recover = new Map<string, string>();
+  for (const session of sessions) { const value = await bridgeHash(bridgeDir, session); if (value) recover.set(value, session); }
   for (const root of piRoots) {
     try {
       await privateDirectory(root, true);
@@ -70,15 +86,18 @@ async function readPi(sessionId: string, piRoots: string[]) {
           const path = join(root, name), head = await safeFile(path, 4096, { head: true, privateMode: true });
           if (!head.length) continue;
           const first = JSON.parse(head[0]);
-          if (first.schema !== 3 || first.kind !== "capture_started" || first.providerSession !== sessionId || first.epoch + ".jsonl" !== name || !/^[a-f0-9]{64}$/.test(first.nativeSessionHash)) continue;
-          hashes.add(first.nativeSessionHash);
+          if (first.schema !== 3 || first.kind !== "capture_started" || first.epoch + ".jsonl" !== name || !/^[a-f0-9]{64}$/.test(first.nativeSessionHash)) continue;
+          const owner = first.providerSession === null ? recover.get(first.nativeSessionHash) : wanted.has(first.providerSession) ? first.providerSession : undefined;
+          if (!owner) continue;
+          if (!hashes.has(owner)) hashes.set(owner, new Set());
+          hashes.get(owner)!.add(first.nativeSessionHash);
           const lines = await safeFile(path, 1048576, { privateMode: true });
           budget -= lines.reduce((size, line) => size + Buffer.byteLength(line) + 1, 0);
           if (budget < 0) { damaged = true; break; }
           const rows = [];
           for (const line of lines) {
             const row = JSON.parse(line);
-            if (row.schema !== 3 || row.providerSession !== sessionId || row.nativeSessionHash !== first.nativeSessionHash || row.epoch !== first.epoch || row.seq !== rows.length + 1) throw Error("invalid-capture");
+            if (row.schema !== 3 || row.providerSession !== first.providerSession || row.nativeSessionHash !== first.nativeSessionHash || row.epoch !== first.epoch || row.seq !== rows.length + 1) throw Error("invalid-capture");
             if (row.kind === "capture_truncated" || row.dropped > 0 || row.missedCalls > 0 || (row.kind === "capture_stopped" && row.inFlight > 0)) damaged = true;
             rows.push(row);
           }
@@ -87,7 +106,9 @@ async function readPi(sessionId: string, piRoots: string[]) {
       }
     } catch (error: any) { if (error.code !== "ENOENT") damaged = true; }
   }
-  if (hashes.size > 1) return emptyUsage("Multiple native Pi identities for this provider session; refusing ambiguous total");
+  // A `pi_<uuid>` file maps to one native session. A `thr_<id>` file is re-forked on every edit, so it may
+  // legitimately span several native sessions of the same BB thread.
+  if ([...hashes].some(([session, set]) => set.size > 1 && !session.startsWith("thr_"))) return emptyUsage("Multiple native Pi identities for this provider session; refusing ambiguous total");
   const result = piUsage(records);
   result.captureIssue = damaged || health.length > 0;
   if (damaged) {
@@ -108,18 +129,20 @@ async function readCli(sessionId: string, root: string) {
   }
   return cliUsage(latest);
 }
-export function createHostEntry(piRoots = defaultPiRoots, cliRoot = join(homedir(), ".copilot", "session-state"), statusRoot: string | string[] = defaultStatusRoots) {
+export function createHostEntry(piRoots = defaultPiRoots, cliRoot = join(homedir(), ".copilot", "session-state"), statusRoot: string | string[] = defaultStatusRoots, bridgeDir: string | null = defaultBridgeDir()) {
 const cache = new Map<string, { at: number; value: Promise<any> }>();
 return experimental_defineHostEntry({
   contract: hostContract,
   handlers: {
-    read: async ({ provider, sessionId }) => {
-      if ((provider === "pi") !== sessionId.startsWith("pi_")) return emptyUsage("Invalid provider session identity");
-      const key = provider + ":" + sessionId, previous = cache.get(key);
+    read: async ({ provider, sessionId, sessionIds = [] }) => {
+      if ((provider === "pi") !== isPiSession(sessionId)) return emptyUsage("Invalid provider session identity");
+      // Every Pi session that ever backed this BB thread (start, resume, edit forks); the latest one sets readiness.
+      const sessions = provider === "pi" ? [...new Set([...sessionIds.filter(isPiSession), sessionId])] : [sessionId];
+      const key = provider + ":" + sessions.join(","), previous = cache.get(key);
       const readiness = provider === "pi" ? readinessSchema.parse(readReadiness(statusRoot, sessionId)) : undefined;
       if (previous && Date.now() - previous.at < 3000) return { ...await previous.value, ...(readiness ? { readiness } : {}) };
       if (cache.size >= 128) cache.delete(cache.keys().next().value!);
-      const value = (provider === "pi" ? readPi(sessionId, piRoots) : readCli(sessionId, cliRoot)).catch(() => emptyUsage("Host telemetry unavailable.", ["host-unavailable"]));
+      const value = (provider === "pi" ? readPi(sessions, piRoots, bridgeDir) : readCli(sessionId, cliRoot)).catch(() => emptyUsage("Host telemetry unavailable.", ["host-unavailable"]));
       cache.set(key, { at: Date.now(), value }); return { ...await value, ...(readiness ? { readiness } : {}) };
     },
   },

@@ -13,6 +13,7 @@ try {
  test('Readiness is separate, lazy until exact provider identity and independently session scoped',()=>{
   const state=createReadiness(directory,'1.5.0');assert(!existsSync(directory));
   state.start({...ctx,sessionManager:{...ctx.sessionManager,getSessionFile:()=>'/tmp/standalone.jsonl'}});assert(!existsSync(directory));
+  {const forked='thr_editfixture',fctx={...ctx,sessionManager:{...ctx.sessionManager,getSessionFile:()=>join(root,forked+'.jsonl')}};state.start(fctx);assert.equal(readReadiness(directory,forked).state,'ready');state.stop();assert.equal(readReadiness(directory,forked).state,'unconfirmed');}
   state.start(ctx);assert.equal(readReadiness(directory,providerSession).state,'ready');assert.equal(readReadiness(directory,'pi_22222222-2222-4222-8222-222222222222').state,'unconfirmed');
   assert(!existsSync(join(root,'receipts')));state.update('disabled');assert.equal(readReadiness(directory,providerSession).state,'disabled');state.update('ready');assert.equal(readReadiness(directory,providerSession).state,'ready');state.stop();assert.equal(readReadiness(directory,providerSession).state,'unconfirmed');
  });

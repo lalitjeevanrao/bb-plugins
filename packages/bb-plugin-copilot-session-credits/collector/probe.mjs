@@ -9,6 +9,8 @@ const REASONS = new Set(['startup', 'quit', 'reload', 'new', 'resume', 'fork']);
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const recordObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const safeLabel = value => typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,119}$/.test(value) ? value : 'unknown';
+// BB bridge file names: `pi_<uuid>` at start, `thr_<BB thread id>` after an edit/rewind fork.
+export const providerSessionName = name => typeof name === 'string' && ((name.startsWith('pi_') && UUID.test(name.slice(3))) || /^thr_[a-zA-Z0-9_-]{1,100}$/.test(name)) ? name : null;
 const hash = (domain, value) => createHash('sha256').update(domain + '\0' + value).digest('hex');
 
 // Only these candidate paths are inspected. No recursive raw-event logging.
@@ -84,7 +86,7 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
       const id = ctx.sessionManager.getSessionId();
       if (typeof id !== 'string' || !UUID.test(id)) { fail(); return; }
       const file = ctx.sessionManager.getSessionFile(), name = typeof file === 'string' ? basename(file, '.jsonl') : '';
-      base = { nativeSessionHash: hash('pi-session-v2', id.toLowerCase()), providerSession: name.startsWith('pi_') && UUID.test(name.slice(3)) ? name : null, reason: REASONS.has(event.reason) ? event.reason : 'unknown', previousSession: typeof event.previousSessionFile === 'string' };
+      base = { nativeSessionHash: hash('pi-session-v2', id.toLowerCase()), providerSession: providerSessionName(name), reason: REASONS.has(event.reason) ? event.reason : 'unknown', previousSession: typeof event.previousSessionFile === 'string' };
     };
     // Lazy: session startup, status and non-Copilot activity never allocate files.
     const ensure = () => {
