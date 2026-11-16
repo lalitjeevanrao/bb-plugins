@@ -7,12 +7,15 @@
 - Composer Auto-collapse: focus-out and idle collapse that keeps drafts.
 - Credits keep their unprefixed tags; the new plugins use `home-hero/` and `composer-autocollapse/` tag prefixes.
 
-## [0.3.3] — Unreleased (UAT)
+## [0.3.4] — 2026-11-16
 
 - Keep Pi credits after editing or rewinding a message. BB forks the Pi session from `pi_<uuid>` to `thr_<thread id>`; the collector, readiness marker, contract and host now accept both names.
 - Total every Pi session the BB thread has used (all `thread/identity` events), not only the latest one.
 - Recover receipts already written with `providerSession: null` for a `thr_` session by matching the native session hash from the BB bridge file header (first 4 KiB only).
 - Never show "Set up credits" when the session identity is pending or unrecognised.
+- Pi install command and docs now point at v0.3.4. Update both the BB plugin and the Pi companion.
+
+## [0.3.3] — 2026-11-09
 
 - Distinguish interim zero placeholders from final Pi Chat Completions billing; count the final amount once only with successful completion and matching response identity.
 - Recognize validated Pi Copilot Chat Completions chunks without `object`/`type` markers; reject explicitly conflicting markers and preserve unknown-shape exclusion.
