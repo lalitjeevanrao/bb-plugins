@@ -2,7 +2,7 @@ import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSy
 import { randomUUID } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 
-const SESSION = /^pi_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const SESSION = /^(pi_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|thr_[a-zA-Z0-9_-]{1,100})$/i;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const STATES = new Set(['ready', 'unsupported', 'error', 'disabled']);
 const owned = stat => !process.getuid || stat.uid === process.getuid();

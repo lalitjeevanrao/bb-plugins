@@ -25,7 +25,8 @@ export function creditDetails(usage, { stale = false, provider, sessionId } = {}
   const readiness = usage?.readiness?.state ?? 'unconfirmed';
   const awaiting = pi && readiness === 'ready' && usage?.aic == null && !usage?.observed && !usage?.reported && !usage?.inFlight && !usage?.missing && !usage?.conflicting && !usage?.captureIssue && issues.size === 0;
   const noUsage = !!usage && usage.aic == null && !usage.observed && !usage.reported && !usage.inFlight && !usage.missing && !usage.conflicting && !usage.captureIssue && issues.size === 0;
-  const setup = pi && readiness === 'unconfirmed' && noUsage && !stale && !issues.has('host-unavailable');
+  // A null session means identity is pending or unrecognised, not that the collector is missing.
+  const setup = pi && sessionId !== null && readiness === 'unconfirmed' && noUsage && !stale && !issues.has('host-unavailable');
   if (pi && !issues.has('host-unavailable')) {
     if (readiness === 'unconfirmed') {
       if (noUsage && !stale) {

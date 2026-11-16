@@ -110,5 +110,28 @@ await test('Pi receipt permissions fail closed without imposing private modes on
     assert.equal((await read('copilot',uuid)).aic,'2');
   }finally{chmodSync(pi,0o700);chmodSync(file,0o600);}
 });
+await test('Edited Pi thread merges pi_ and thr_ sessions, recovers null-session receipts by bridge header, and server sends identity history',async()=>{
+  const dir=join(root,'edit-receipts'),bridge=join(root,'bridge'),status=join(root,'edit-status');mkdirSync(dir,{mode:0o700});mkdirSync(bridge,{mode:0o700});
+  const forked='thr_editfixture',nativeId='01a10000-0000-7000-8000-00000000f0f0',{createHash}=await import('node:crypto');
+  const forkHash=createHash('sha256').update('pi-session-v2\0'+nativeId).digest('hex');
+  const write=(e,c,session,hash,nano)=>writeFileSync(join(dir,e+'.jsonl'),[{kind:'capture_started'},{kind:'call_started',callId:c},{kind:'observation',callId:c,billing:[{nanoAiu:nano}]},{kind:'call_finished',callId:c,outcome:'stop'}].map((r,i)=>JSON.stringify({schema:3,seq:i+1,epoch:e,providerSession:session,nativeSessionHash:hash,at:'2026-11-05T00:00:00Z',...r})).join('\n')+'\n',{mode:0o600});
+  write('a0000000-0000-4000-8000-000000000001','c0000000-0000-4000-8000-000000000001',providerId,'a'.repeat(64),'2000000000');
+  write('a0000000-0000-4000-8000-000000000002','c0000000-0000-4000-8000-000000000002',null,forkHash,'3000000000'); // pre-fix collector
+  write('a0000000-0000-4000-8000-000000000003','c0000000-0000-4000-8000-000000000003',forked,'c'.repeat(64),'4000000000'); // fixed collector, later re-fork
+  write('a0000000-0000-4000-8000-000000000004','c0000000-0000-4000-8000-000000000004',null,'d'.repeat(64),'9000000000'); // unrelated null session
+  writeFileSync(join(bridge,forked+'.jsonl'),JSON.stringify({type:'session',version:3,id:nativeId,parentSession:'/fixture/'+providerId+'.jsonl'})+'\n'+JSON.stringify({type:'message',content:'PRIVATE_CANARY'})+'\n');
+  const host=experimental_createHostEntryHarness(createHostEntry([dir],cli,status,bridge));
+  try{
+    assert.equal((await host.experimental_call('read',{provider:'pi',sessionId:forked})).aic,'7');
+    assert.equal((await host.experimental_call('read',{provider:'pi',sessionId:providerId})).aic,'2');
+    const calls=[];
+    const {bb,harness}=createFakePluginHost({pluginId:'copilot-session-credits',sdk:{threads:{get:async()=>({...makeThreadResponse({providerId:'pi'}),environment:{hostId:'host_fixture'}}),events:{list:async q=>{assert.equal(q.limit,'100');return [{type:'thread/identity',seq:2376,data:{providerThreadId:forked}},{type:'thread/identity',seq:2121,data:{providerThreadId:providerId}},{type:'thread/identity',seq:12,data:{providerThreadId:providerId}}];}}}},experimental_callHostRpc:async args=>{calls.push(args.input);return host.experimental_call(args.method,args.input);}});
+    try{
+      plugin(bb);const r=await harness.behavior.callRpc('usage',{threadId:'thr_editfixture'});
+      assert.deepEqual(calls[0],{provider:'pi',sessionId:forked,sessionIds:[providerId,forked]});
+      assert.equal(r.sessionId,forked);assert.equal(r.aic,'9');assert.equal(r.reported,3);assert(!JSON.stringify(r).includes('PRIVATE_CANARY'));
+    }finally{await harness.lifecycle.dispose();}
+  }finally{await host.experimental_dispose();}
+});
 }finally{rmSync(root,{recursive:true,force:true});}
 if(process.argv[2])writeFileSync(process.argv[2],JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));if(results.some(r=>r.status==='failed'))process.exitCode=1;

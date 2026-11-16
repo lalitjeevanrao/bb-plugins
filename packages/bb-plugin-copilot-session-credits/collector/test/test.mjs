@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, readdirSync, statSync, mkdirSync, symlinkSync, rmSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createProbe, observeBilling } from '../probe.mjs';
+import { createProbe, observeBilling, providerSessionName } from '../probe.mjs';
 
 const results = [];
 const check = async (name, run) => { await run(); results.push({ name, status: 'passed' }); };
@@ -23,6 +23,11 @@ function harness(directory, options = {}) {
 const rows = directory => readdirSync(directory).flatMap(name => readFileSync(join(directory, name), 'utf8').trim().split('\n').map(JSON.parse));
 const event = data => ({ provider: 'github-copilot', api: 'openai-responses', model: 'gpt-fixture', data });
 try {
+  await check('BB bridge session names: pi_<uuid> and thr_<id> accepted, others rejected', () => {
+    assert.equal(providerSessionName('pi_11111111-1111-4111-8111-111111111111'), 'pi_11111111-1111-4111-8111-111111111111');
+    assert.equal(providerSessionName('thr_editfixture'), 'thr_editfixture');
+    for (const bad of ['standalone', 'pi_nope', 'thr_', 'thr_../x', '11111111-1111-4111-8111-111111111111', null]) assert.equal(providerSessionName(bad), null);
+  });
   await check('zero, exact strings, safe integers and explicit paths', () => {
     assert.deepEqual(observeBilling({ copilot_usage: { total_nano_aiu: 0 } }), [{ path: 'copilot_usage.total_nano_aiu', nanoAiu: '0', valueType: 'number' }]);
     assert.equal(observeBilling({ response: { copilot_usage: { total_nano_aiu: '9007199254740993123' } } })[0].nanoAiu, '9007199254740993123');
