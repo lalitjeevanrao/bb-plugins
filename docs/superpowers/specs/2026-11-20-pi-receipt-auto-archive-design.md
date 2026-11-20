@@ -112,3 +112,44 @@ Host (`test/integration-test.mjs`):
 - Archived receipts in a session shard count. A null-session shard is recovered by bridge hash. Totals before and after a real `probe.mjs` maintenance run are equal, and `collector-full` clears.
 - One name in both the active root and the archive is counted once.
 - A shard over 1024 entries is damaged and bounded. Unrelated shards are never opened.
+
+## Addendum: hands-off operation (owner, 2026-11-20)
+
+The owner wants maintenance that never needs a person. Three gaps remained, and the owner added all three to this PR. They override the issue's "leave status roots untouched" for the new status root only. The legacy roots stay untouched.
+
+### A. Leftovers whose writer has exited
+
+A crashed or killed Pi leaves a receipt with no terminal row. It holds a slot forever (the field data showed about one every 4–5 days).
+
+- The writer adds two optional fields to `capture_started`: `writerPid` (its `process.pid`) and `writerHost`, the SHA-256 hex of `"pi-host-v1" + NUL + os.hostname()`. These are backward-compatible schema-3 extensions, and older readers ignore them.
+- A receipt with no terminal row is still eligible when every other closure check passes, its `capture_started` carries both fields, `writerHost` equals this host's hash, `writerPid !== process.pid`, `process.kill(writerPid, 0)` fails with `ESRCH`, and the file has not changed for 10 minutes (`mtime`).
+- PID reuse only makes a dead writer look alive, which is the safe direction: the file waits until the reusing process exits. `EPERM` counts as alive. A receipt from another host (`writerHost` differs) never moves on this rule.
+- Defence in depth: a move keeps the inode. Even a writer wrongly judged dead would keep appending to the same file, now in its shard, so the bytes stay readable and nothing is lost.
+- Receipts written before this change have no `writerPid`. They stay manual, as documented.
+- A torn last line is still ineligible.
+
+### B. Host cache for archived and unchanged receipts
+
+The reader's 8 MiB budget is a per-refresh read cost. A long thread could exceed it and show *Missing data* on every refresh.
+
+- The host keeps a per-process cache keyed by path. A hit requires the same `lstat` dev, ino, size, mtime, ctime, mode, nlink and uid. The `lstat` runs every time (no symlink is followed) and the safety checks are the same as `safeFile`. A changed file is read again.
+- The cached value is the validated file in slim form: its identity, its damage flags, the largest `at`, and only the fields `piUsage` reads from call rows (`kind`, `callId`, `outcome`, `api`, `eventType`, `billingPhase`, `responseHash`, `billing` scalars).
+- The 8 MiB budget counts only bytes actually read in a refresh. A cold read over budget reports *Missing data* for that refresh, keeps what it read, and finishes on later refreshes (each about 3 s apart).
+- Cache size: at most 64 MiB of source bytes, least recently used first. A thread whose receipts exceed 64 MiB keeps reporting *Missing data*. That is documented and far beyond the field data.
+- Shard limit raised from 1024 to 4096 entries for both reader and writer. Cached entries cost one `lstat` each. At the field rate of 16 receipts per thread in 9 days, that is years.
+
+### C. Startup-status leftovers (new status root only)
+
+Status markers already carry `pid`. Crashes leave markers and empty session directories (385 entries in the field data).
+
+- On `session_start`, at most once every 10 minutes per process, the readiness writer sweeps `copilot-session-credits-status/`. It handles at most 256 session directories and 1024 files per run, continuing from where the last run stopped.
+- It removes a marker only when the marker passes `readMarker` validation, is not this process's own instance, and `process.kill(pid, 0)` fails with `ESRCH`. It re-checks dev/ino before `unlink`. Invalid, unsafe or ambiguous files stay.
+- It removes `.ready-*` temp files older than 10 minutes (a temp file lives only between write and rename). It removes empty session directories with `rmdir`, which cannot remove a non-empty one, only when unchanged for 10 minutes.
+- Race: another process may create its marker in a directory just removed. `write()` re-creates the directory and retries once on `ENOENT`.
+- The legacy `session-credits-status/` root is never touched.
+
+### Tests for the addendum
+
+- A leftover with a dead `writerPid` on this host and older than 10 minutes moves. A live pid, another host, a recent mtime, no `writerPid` or a torn last line stays.
+- Host cache: a second read of an unchanged archived receipt reads no bytes (a spy on `open`). An appended or replaced file is read again. A thread over 8 MiB converges to the full total within a few refreshes. The LRU cap holds.
+- Status sweep: dead markers and old temp files are removed. Live, invalid and own markers stay. Empty old directories are removed, recent or non-empty ones stay, and the legacy root is untouched. A concurrent `write()` after an `rmdir` still lands.
