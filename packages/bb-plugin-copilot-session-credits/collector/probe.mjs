@@ -48,9 +48,11 @@ function checkRoot(directory) {
 // Runs `work` under the shared `.capture-lock`. Returns 'busy' when another holder has it; never steals it.
 function withLock(directory, work) {
   const lock = join(directory, '.capture-lock');
+  process.stderr.write('lock-take ' + process.pid + '\n');
   // ponytail: skip contended calls, retry next call; never steal a crash-left lock.
   try { mkdirSync(lock, { mode: 0o700 }); } catch (error) { if (error.code === 'EEXIST') return 'busy'; throw error; }
-  try { return work(); } finally { try { rmdirSync(lock); } catch {} }
+  process.stderr.write('lock-held ' + process.pid + '\n');
+  try { return work(); } finally { try { rmdirSync(lock); process.stderr.write('lock-drop ' + process.pid + '\n'); } catch (e) { process.stderr.write('lock-drop-FAIL ' + process.pid + ' ' + e.code + '\n'); } }
 }
 // All schema-3 writers reserve files under the same atomic mkdir lock. Maintenance moves closed receipts
 // under that lock before the cap check; no evidence is deleted. Returns an fd, 'busy' or 'full'.
@@ -131,9 +133,9 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
       if (capture) return capture;
       const epoch = randomUUID(), identity = { epoch, nativeSessionHash: base.nativeSessionHash, providerSession: base.providerSession };
       let fd;
-      try { fd = openCapture(directory, epoch, maxFiles, root => maintain(root)); } catch { fail(); return undefined; }
+      try { fd = openCapture(directory, epoch, maxFiles, root => maintain(root)); } catch (e) { process.stderr.write('openerr:' + (e && e.message) + '\n'); fail(); return undefined; }
       // Busy or full: the provider call still runs without a receipt; the next call retries.
-      if (fd === 'busy' || fd === 'full') { missedCalls++; lastMiss = fd; return undefined; }
+      if (fd === 'busy' || fd === 'full') { process.stderr.write('miss:' + fd + '\n'); missedCalls++; lastMiss = fd; return undefined; }
       lastMiss = undefined;
       let bytes = 0, records = 0, dropped = 0, rawEvents = 0, amountObservations = 0, truncated = false, inFlight = 0;
       const close = () => { if (fd !== undefined) { try { closeSync(fd); } catch {} fd = undefined; } };

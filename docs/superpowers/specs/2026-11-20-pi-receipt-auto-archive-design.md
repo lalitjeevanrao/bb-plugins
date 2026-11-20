@@ -153,3 +153,31 @@ Status markers already carry `pid`. Crashes leave markers and empty session dire
 - A leftover with a dead `writerPid` on this host and older than 10 minutes moves. A live pid, another host, a recent mtime, no `writerPid` or a torn last line stays.
 - Host cache: a second read of an unchanged archived receipt reads no bytes (a spy on `open`). An appended or replaced file is read again. A thread over 8 MiB converges to the full total within a few refreshes. The LRU cap holds.
 - Status sweep: dead markers and old temp files are removed. Live, invalid and own markers stay. Empty old directories are removed, recent or non-empty ones stay, and the legacy root is untouched. A concurrent `write()` after an `rmdir` still lands.
+
+### Addendum review changes (GPT-6.1-Sol review, thread thr_v4pys6bevm)
+
+**Process identity replaces the hostname hash.** `collector/identity.mjs` computes once per process, lazily:
+
+- `machine`: SHA-256 of `"pi-machine-v1" + NUL` + the hardware UUID (macOS `ioreg … IOPlatformUUID`) or `/etc/machine-id` (Linux).
+- `boot`: SHA-256 of the boot ID (macOS `sysctl kern.bootsessionuuid`, Linux `/proc/sys/kernel/random/boot_id`).
+- `pidns`: SHA-256 of the PID namespace (`/proc/self/ns/pid` link on Linux, the constant `darwin` on macOS).
+
+If any part is unavailable, the process has no identity. Its evidence is then never judged dead, and its leftovers stay manual.
+
+A writer is **dead** only when its identity has the same `machine` as this process, and either its `boot` differs (that boot has ended) or its `boot` and `pidns` are both equal and `kill(pid, 0)` fails with `ESRCH`. Same boot with a different PID namespace means unknown, which counts as alive. A different machine also means unknown. `EPERM` means alive.
+
+`capture_started` carries `writer: { pid, machine, boot, pidns }` (optional schema-3 extension). A leftover moves only when its writer is dead and the file has been unchanged for 10 minutes.
+
+**Crash-held `.capture-lock` recovery.**
+- A new holder writes `.capture-lock/owner.json` (its identity, `O_EXCL`, `0600`) right after `mkdir`. It releases by checking the owner is still itself, unlinking `owner.json`, then `rmdir`.
+- When the lock is busy and holds a valid `owner.json` whose writer is dead, the process renames the whole `.capture-lock` directory to `<archive>/.broken-locks/<owner instance>`. If a stale lock was ever re-created, that target already exists and is non-empty, so a second rename onto it fails (`ENOTEMPTY`/`EEXIST`). A fresh lock taken by a live process can therefore never be renamed by a late breaker.
+- Then it retries `mkdir` once.
+- A lock with no `owner.json` (an older collector, or a crash in the microseconds between `mkdir` and the owner write) is never broken.
+- Age never decides.
+
+**Status sweep fairness and evidence.**
+- Each readiness instance writes its identity once to `copilot-session-credits-status/.instances/<instance>.json`. Readers only open `<providerSession>` directories, so older readers never see it.
+- A marker is removed only when its instance has a valid identity record with the same `pid` and that writer is dead. The identity record is removed after its marker.
+- Markers without an identity record (all pre-change markers) stay. The reader already ignores them when their process is dead.
+- Empty session directories and `.ready-*` temp files unchanged for 10 minutes are removed.
+- The sweep runs on `session_start` and `agent_end`, at most every 10 minutes per process. It starts at a random offset in the sorted directory list and wraps around, so restarts cover all directories over time without stored state. The bounds stay at 256 directories and 1024 files per run.
