@@ -191,3 +191,8 @@ The review rejected ec408f6 for three reproduced stalls. All three are fixed, ea
 3. **Status starvation inside a folder.** The folder listing is bounded to 4096 names. Only marker and temp names are candidates, at most 64 per folder per run, starting at a random candidate.
 
 The surviving mutant "status timer ignored" is now caught: the test changes the start offset inside the 10-minute window.
+
+Re-review of 4cb7aa4 (same thread): the three stalls recover. Two follow-ups are fixed:
+
+- A pending release is forgotten only when `lstat` shows the lock is gone (`ENOENT`) or replaced (different inode). Any other error keeps it pending.
+- The status sweep lists each folder in full (up to 1,000,000 entries) and keeps a uniform reservoir sample of at most 64 candidates. No position can starve, even behind persistent live markers.

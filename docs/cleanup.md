@@ -27,7 +27,7 @@ BB reads the capture folder, then only the shards of the requested sessions, the
 
 ## Abandoned allocation lock
 
-A collector holding `.capture-lock` records itself in `.capture-lock/owner.json`. If that process crashes while holding the lock, the next collector proves it exited (as above) and moves the whole lock to `copilot-session-credits-archive/.broken-locks/<instance>`, then continues. Those small folders are kept as a record. If a collector fails to release its own lock because of a transient I/O error, it finishes the release on its next attempt. A lock without a readable owner, for example one held by an older collector, is never moved: wait for it, or stop all Pi processes and remove it.
+A collector holding `.capture-lock` records itself in `.capture-lock/owner.json`. If that process crashes while holding the lock, the next collector proves it exited (as above) and moves the whole lock to `copilot-session-credits-archive/.broken-locks/<instance>`, then continues. Those small folders are kept as a record. If a collector fails to release its own lock because of a transient I/O error, it keeps retrying on later attempts until the lock is released or provably gone. A lock without a readable owner, for example one held by an older collector, is never moved: wait for it, or stop all Pi processes and remove it.
 
 ## When the folder is full
 
@@ -66,7 +66,7 @@ Each Pi process writes a small status file per session, plus `copilot-session-cr
 
 - It removes a status file once its process provably exited (as for receipts), together with its identity record.
 - It removes `.ready-*` temporary files and empty session folders that have not changed for 10 minutes.
-- It handles at most 256 session folders and 1024 files per run, and at most 64 status or temporary files per folder. Other names are skipped without being touched. It starts at a random folder and a random file within each folder, so everything is reached over time.
+- It handles at most 256 session folders and 1024 files per run, and at most 64 status or temporary files per folder, picked at random from the whole folder. Other names are skipped without being touched. It starts at a random folder, so everything is reached over time. A single folder is listed up to its first million entries.
 
 Status files written by v0.3.4 and earlier have no identity record. They stay, and BB ignores them once their process is dead. To clear them, stop all Pi processes and move the status root to a fresh private sibling:
 

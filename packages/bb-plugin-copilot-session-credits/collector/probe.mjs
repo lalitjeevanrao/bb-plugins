@@ -94,7 +94,10 @@ function withLock(directory, root, state, work) {
   const finishUnreleased = () => {
     const held = state.unreleased;
     if (!held) return false;
-    try { if (lstatSync(lock).ino !== held.lockIno) { state.unreleased = undefined; return false; } } catch { state.unreleased = undefined; return false; }
+    // Forget the pending release only when the lock is provably gone or replaced; keep it on any other error.
+    let current;
+    try { current = lstatSync(lock); } catch (error) { if (error.code === 'ENOENT') state.unreleased = undefined; return false; }
+    if (current.ino !== held.lockIno) { state.unreleased = undefined; return false; }
     if (!release(held)) return false;
     state.unreleased = undefined;
     return true;

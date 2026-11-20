@@ -7,7 +7,7 @@ const SESSION = /^(pi_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{1
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const STATES = new Set(['ready', 'unsupported', 'error', 'disabled']);
 const owned = stat => !process.getuid || stat.uid === process.getuid();
-const INSTANCES = '.instances', QUIET_MS = 600_000, SWEEP_MS = 600_000, SWEEP_DIRECTORIES = 256, SWEEP_FILES = 1024, FOLDER_FILES = 64, FOLDER_LIST = 4096;
+const INSTANCES = '.instances', QUIET_MS = 600_000, SWEEP_MS = 600_000, SWEEP_DIRECTORIES = 256, SWEEP_FILES = 1024, FOLDER_FILES = 64, FOLDER_SCAN = 1_000_000;
 function safeDirectory(path, privateMode = true) {
   const stat = lstatSync(path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || realpathSync(path) !== path || !owned(stat) || (stat.mode & (privateMode ? 0o077 : 0o022))) throw Error('Unsafe readiness directory');
@@ -138,15 +138,23 @@ export function createReadiness(directory, runtimeVersion, { now = Date.now, ran
       try {
         const folderStat = lstatSync(folder);
         safeDirectory(folder);
-        // Only marker and temp names are candidates; foreign names cost nothing. A random start inside the
-        // folder means no fixed prefix can starve later candidates.
-        const listing = [], dir = opendirSync(folder);
-        try { let entry; while (listing.length < FOLDER_LIST && (entry = dir.readSync())) listing.push(entry.name); } finally { dir.closeSync(); }
-        const names = listing.filter(name => (name.endsWith('.json') && UUID.test(name.slice(0, -5))) || name.startsWith('.ready-')).sort();
-        const offset = Math.floor(random() * names.length);
-        for (let step = 0; step < Math.min(FOLDER_FILES, names.length); step++) {
+        // Only marker and temp names are candidates; foreign names cost one directory read each and nothing else.
+        // A uniform random sample (reservoir) of at most 64 candidates means no position in the folder can starve.
+        const names = [], dir = opendirSync(folder);
+        let candidates = 0;
+        try {
+          let entry, scanned = 0;
+          while (scanned++ < FOLDER_SCAN && (entry = dir.readSync())) {
+            const name = entry.name;
+            if (!((name.endsWith('.json') && UUID.test(name.slice(0, -5))) || name.startsWith('.ready-'))) continue;
+            candidates++;
+            if (names.length < FOLDER_FILES) names.push(name);
+            else { const slot = Math.floor(random() * candidates); if (slot < FOLDER_FILES) names[slot] = name; }
+          }
+        } finally { dir.closeSync(); }
+        for (const name of names) {
           if (++files > SWEEP_FILES) break;
-          const name = names[(offset + step) % names.length], file = join(folder, name);
+          const file = join(folder, name);
           try {
             if (name.endsWith('.json') && UUID.test(name.slice(0, -5)) && name !== instance + '.json') {
               const { value, stat } = readMarker(file, session);

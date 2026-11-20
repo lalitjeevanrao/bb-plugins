@@ -275,6 +275,50 @@ try {
     assert(!fs.existsSync(path)); assert.equal(fs.readdirSync(folder).length, 1024, 'foreign entries untouched');
     readiness.stop();
   });
+
+  await check('an uncertain error while finishing a pending release keeps it pending until the lock is proven gone or released', async () => {
+    const { syncBuiltinESMExports } = await import('node:module');
+    const directory = privateDir(join(root, 'release-uncertain')), h = harness(directory), rmdir = fs.rmdirSync, lstat = fs.lstatSync;
+    let rmdirFaults = 0, lstatFault = false;
+    fs.rmdirSync = (path, ...rest) => { if (String(path).endsWith('.capture-lock') && rmdirFaults < 2) { rmdirFaults++; const error = new Error('injected'); error.code = 'EIO'; throw error; } return rmdir(path, ...rest); };
+    fs.lstatSync = (path, ...rest) => { if (lstatFault && String(path).endsWith('.capture-lock')) { lstatFault = false; const error = new Error('injected'); error.code = 'EIO'; throw error; } return lstat(path, ...rest); };
+    syncBuiltinESMExports();
+    try {
+      await h.call();
+      assert(fs.existsSync(join(directory, '.capture-lock')));
+      lstatFault = true; h.newSession('f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1'); await h.call();
+      assert(!lstatFault, 'the fault fired'); assert(fs.existsSync(join(directory, '.capture-lock')), 'still pending, not forgotten');
+      h.newSession('f2f2f2f2-f2f2-4f2f-8f2f-f2f2f2f2f2f2'); await h.call();
+    } finally { fs.rmdirSync = rmdir; fs.lstatSync = lstat; syncBuiltinESMExports(); }
+    assert(!fs.existsSync(join(directory, '.capture-lock'))); assert.equal(fresh(directory).length, 2);
+  });
+
+  await check('status sweep reaches dead markers anywhere in a folder of any size, a uniform sample per run', () => {
+    const dir = join(root, 'status-huge'), session = 'pi_56565656-5656-4565-8565-565656565656', folder = privateDir(join(dir, session));
+    for (let n = 0; n < 6000; n++) fs.writeFileSync(join(folder, 'foreign-' + n), '');
+    privateDir(join(dir, '.instances'));
+    const markers = Array.from({ length: 200 }, () => {
+      const instance = randomUUID(), path = join(folder, instance + '.json');
+      fs.writeFileSync(path, JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
+      fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 });
+      return path;
+    });
+    let clock = Date.now(), seed = 7;
+    const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const readiness = createReadiness(dir, '1.5.2', { exited, writerIdentity: () => self, now: () => clock, random });
+    readiness.start(sessionCtx('pi_00000000-0000-4000-8000-000000000000'));
+    assert.equal(markers.filter(path => fs.existsSync(path)).length, 200 - 64, 'at most 64 per folder per run');
+    for (let run = 0; run < 3; run++) { clock += 11 * minutes; readiness.maintain(); }
+    assert.equal(markers.filter(path => fs.existsSync(path)).length, 0); assert.equal(fs.readdirSync(folder).length, 6000);
+    // 200 live markers stay forever; a fair sample still reaches the one dead marker among them.
+    const live = Array.from({ length: 200 }, () => { const instance = randomUUID(); fs.writeFileSync(join(folder, instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid: ALIVE, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 }); fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: writer(ALIVE) }), { mode: 0o600 }); return instance; });
+    const instance = randomUUID(), dead = join(folder, instance + '.json');
+    fs.writeFileSync(dead, JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
+    fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 });
+    for (let run = 0; run < 40 && fs.existsSync(dead); run++) { clock += 11 * minutes; readiness.maintain(); }
+    assert(!fs.existsSync(dead), 'reached behind persistent candidates'); assert.equal(live.filter(id => fs.existsSync(join(folder, id + '.json'))).length, 200);
+    readiness.stop();
+  });
   console.log(JSON.stringify(results, null, 2));
   if (results.some(row => row.status === 'failed')) process.exitCode = 1;
 } finally { fs.rmSync(root, { recursive: true, force: true }); }
