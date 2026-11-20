@@ -247,7 +247,7 @@ try {
       const invoke = () => { calls++; return { result: () => Promise.resolve({ stopReason: 'stop' }) }; };
       createProbe({ directory, autoStart: true, provider: { id: 'github-copilot', stream: invoke, streamSimple: invoke } })({ on: (name, run) => hooks.set(name, run), registerCommand() {}, registerProvider: value => { wrapped = value; } });
       hooks.get('session_start')({ reason: 'startup' }, { sessionManager: { getSessionId: () => session, getSessionFile: () => null } });
-      for (let i = 0; i < 40; i++) { await wrapped.streamSimple({ provider: 'github-copilot', api: 'anthropic-messages', id: 'fixture' }, {}, {}).result(); hooks.get('agent_end')({}); }
+      for (let i = 0; i < 40; i++) { await new Promise(resolve => setTimeout(resolve, 2)); await wrapped.streamSimple({ provider: 'github-copilot', api: 'anthropic-messages', id: 'fixture' }, {}, {}).result(); hooks.get('agent_end')({}); }
       hooks.get('session_shutdown')({ reason: 'quit' });
       console.log(JSON.stringify({ calls }));`;
     const run = session => new Promise((resolve, reject) => {

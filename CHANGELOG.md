@@ -12,6 +12,10 @@
 - Pi collector archives closed receipts automatically. From 224 entries it moves the oldest receipts that end in `capture_stopped` or `capture_truncated` into `~/.pi/agent/copilot-session-credits-archive/<session>/`, down to 192. The move is a hard link then unlink under `.capture-lock`. It never overwrites or deletes, and it never touches live, checkpoint-only or malformed receipts.
 - A full receipt folder no longer turns capture off for the session. Copilot calls still run, `/copilot-probe status` shows `collector-full`, and capture resumes on the next call once a slot is free. Missed calls stay marked as missing.
 - BB reads the archive shards of the thread's sessions, so totals survive archiving and each receipt counts once.
+- Receipts left by a crashed or killed Pi move to the archive once their process has provably exited (same machine; earlier boot, or no such process in the same boot and PID namespace) and they have been unchanged for 10 minutes. Older leftovers without a writer identity stay manual.
+- An allocation lock left by a crashed process is recovered automatically when its recorded owner provably exited. A lock without an owner is never taken.
+- BB caches parsed receipts that have not changed (up to 64 MiB), so long threads stay within the per-refresh read budget. Archive shards hold up to 4096 receipts.
+- Startup-status leftovers of exited processes, abandoned temporary files and empty session folders are cleaned up automatically. Status files written by older versions are left alone.
 - Update both the BB plugin and the Pi companion; an older BB plugin does not read the archive.
 
 ## [0.3.4] — 2026-11-16

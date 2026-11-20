@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, symlinkSync, rmSync, utimesSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHostEntry } from '../dist/host.js';
+import { createHostEntry, ReceiptCache } from '../dist/host.js';
 import { experimental_createHostEntryHarness } from '@get-bb/plugin-sdk/testing/host';
 import { createFakePluginHost, makeThreadResponse } from '@get-bb/plugin-sdk/testing';
 import plugin from '../dist/server.js';
@@ -165,8 +165,45 @@ await test('Archive shard reads are bounded and limited to the requested session
   closed(mine,providerId,'a'.repeat(64),'1000000000');writeFileSync(join(other,'bad.jsonl'),'x');
   const read=async()=>{const host=experimental_createHostEntryHarness(createHostEntry([dir],cli,join(root,'none'),null));try{return await host.experimental_call('read',{provider:'pi',sessionId:providerId});}finally{await host.experimental_dispose();}};
   let r=await read();assert.equal(r.aic,'1');assert.equal(r.captureIssue,false,'unrelated unsafe shard is never opened');
-  for(let i=0;i<1024;i++)writeFileSync(join(mine,'filler-'+i),'');
+  for(let i=0;i<4096;i++)writeFileSync(join(mine,'filler-'+i),'');
   r=await read();assert.equal(r.captureIssue,true);assert(r.issues.includes('capture-damaged'));
+});
+
+await test('Host cache: unchanged receipts are not read again; changed ones are',async()=>{
+  const {createRequire}=await import('node:module'),require=createRequire(import.meta.url),fsp=require('node:fs/promises'),{syncBuiltinESMExports}=await import('node:module'),fs=await import('node:fs');
+  const dir=join(root,'cache'),archive=dir+'-archive',shard=join(archive,providerId);mkdirSync(dir,{mode:0o700});mkdirSync(archive,{mode:0o700});mkdirSync(shard,{mode:0o700});
+  const a=closed(shard,providerId,'a'.repeat(64),'1000000000'),b=closed(dir,providerId,'a'.repeat(64),'2000000000');
+  const host=experimental_createHostEntryHarness(createHostEntry([dir],cli,join(root,'none'),null));
+  const opened=[],original=fsp.open;fsp.open=(path,...rest)=>{opened.push(String(path));return original(path,...rest);};syncBuiltinESMExports();
+  let n=0;const read=async()=>host.experimental_call('read',{provider:'pi',sessionId:providerId,sessionIds:['thr_cachebust'+(n++)]});
+  try{
+    assert.equal((await read()).aic,'3');assert.equal(opened.filter(p=>p.endsWith('.jsonl')).length,4,'head and full read of each receipt');
+    opened.length=0;assert.equal((await read()).aic,'3');assert.deepEqual(opened.filter(p=>p.endsWith('.jsonl')),[],'cached receipts cost an lstat only');
+    // A receipt that changes (a live capture finishing another call) is read again.
+    const rows=fs.readFileSync(b.path,'utf8').trim().split('\n').map(JSON.parse),last=rows.at(-1),c='99999999-9999-4999-8999-999999999999';
+    rows.pop();for(const row of [{kind:'call_started',callId:c},{kind:'observation',callId:c,billing:[{nanoAiu:'4000000000'}]},{kind:'call_finished',callId:c,outcome:'stop'},{kind:'capture_stopped'}])rows.push({...last,...row,seq:rows.length+1});
+    fs.writeFileSync(b.path,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
+    opened.length=0;assert.equal((await read()).aic,'7');assert(opened.some(p=>p===b.path));assert(!opened.includes(a.path));
+  }finally{fsp.open=original;syncBuiltinESMExports();await host.experimental_dispose();}
+});
+await test('Host cache: a thread over the per-refresh read budget converges to the full total',async()=>{
+  const dir=join(root,'budget'),archive=dir+'-archive',shard=join(archive,providerId);mkdirSync(dir,{mode:0o700});mkdirSync(archive,{mode:0o700});mkdirSync(shard,{mode:0o700});
+  const pad='x'.repeat(250000);
+  for(let i=0;i<16;i++){const e=globalThis.crypto.randomUUID(),c=globalThis.crypto.randomUUID();writeFileSync(join(shard,e+'.jsonl'),[{kind:'capture_started'},{kind:'call_started',callId:c,pad},{kind:'observation',callId:c,billing:[{nanoAiu:'1000000000'}],pad},{kind:'call_finished',callId:c,outcome:'stop',pad},{kind:'capture_stopped'}].map((r,i)=>JSON.stringify({schema:3,seq:i+1,epoch:e,providerSession:providerId,nativeSessionHash:'a'.repeat(64),at:'2026-11-05T00:00:00Z',...r})).join('\n')+'\n',{mode:0o600});}
+  const host=experimental_createHostEntryHarness(createHostEntry([dir],cli,join(root,'none'),null));
+  let n=0;const read=async()=>host.experimental_call('read',{provider:'pi',sessionId:providerId,sessionIds:['thr_budget'+(n++)]});
+  try{
+    const first=await read();assert.equal(first.captureIssue,true,'over budget on a cold read');assert(first.issues.includes('capture-damaged'));
+    let r=first;for(let i=0;i<4&&r.captureIssue;i++)r=await read();
+    assert.equal(r.captureIssue,false);assert.equal(r.aic,'16');
+  }finally{await host.experimental_dispose();}
+});
+await test('Receipt cache evicts least recently used entries by source bytes and drops changed entries',()=>{
+  const cache=new ReceiptCache(10),entry=(key,bytes)=>({key,bytes,first:null});
+  cache.set('a',entry('1',4));cache.set('b',entry('1',4));assert(cache.get('a','1'));cache.set('c',entry('1',4));
+  assert.equal(cache.size,8);assert.equal(cache.get('b','1'),undefined,'least recently used goes first');assert(cache.get('a','1'));assert(cache.get('c','1'));
+  assert.equal(cache.get('a','2'),undefined,'changed file');assert.equal(cache.get('a','1'),undefined);assert.equal(cache.size,4);
+  cache.set('huge',entry('1',11));assert.equal(cache.get('huge','1'),undefined);assert.equal(cache.size,4);
 });
 }finally{rmSync(root,{recursive:true,force:true});}
 if(process.argv[2])writeFileSync(process.argv[2],JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));if(results.some(r=>r.status==='failed'))process.exitCode=1;

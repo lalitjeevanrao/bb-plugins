@@ -3,9 +3,11 @@
 // keeping its inode, owner and mode. Anything that is not provably closed stays where it is.
 import { constants, closeSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, readdirSync, realpathSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import { writerExited } from './identity.mjs';
 
 export const RECEIPT_NAME = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.jsonl$/i;
-export const SHARD_LIMIT = 1024;
+export const SHARD_LIMIT = 4096;
+export const QUIET_MS = 600_000;
 const SESSION = /^(pi_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|thr_[a-zA-Z0-9_-]{1,100})$/i;
 const HASH = /^[a-f0-9]{64}$/;
 const TERMINAL = new Set(['capture_stopped', 'capture_truncated']);
@@ -62,8 +64,9 @@ function tailIsTerminal(fd, size) {
   } catch { return null; }
 }
 
-// Full schema-3 closure proof. Returns the archive shard, or null when the receipt must stay.
-function closedShard(fd, size, name) {
+// Full schema-3 validation. Returns the archive shard, whether the receipt ended with a terminal row, and its
+// writer identity; null when the receipt is malformed or ambiguous and must stay.
+function proveReceipt(fd, size, name) {
   const text = readAt(fd, size, 0).toString('utf8');
   if (!text.endsWith('\n')) return null;
   const lines = text.slice(0, -1).split('\n');
@@ -79,22 +82,27 @@ function closedShard(fd, size, name) {
     } else if (row.epoch !== first.epoch || row.providerSession !== first.providerSession || row.nativeSessionHash !== first.nativeSessionHash) return null;
     if (TERMINAL.has(row.kind)) terminals++;
   }
-  const last = JSON.parse(lines.at(-1));
-  if (terminals !== 1 || !TERMINAL.has(last.kind)) return null;
-  return shardName(first.providerSession, first.nativeSessionHash);
+  const terminal = TERMINAL.has(JSON.parse(lines.at(-1)).kind);
+  if (terminals !== (terminal ? 1 : 0)) return null;
+  const shard = shardName(first.providerSession, first.nativeSessionHash);
+  return shard && { shard, terminal, writer: first.writer };
 }
 
 // Opens a receipt by name and checks it is the inode `expected` describes. `links` is the accepted nlink.
-function inspect(directory, name, expected, links, budget) {
+// Eligible: a closed receipt, or a leftover with no terminal row whose writer provably exited and that has not
+// changed for `quietMs`.
+function inspect(directory, name, expected, links, budget, leftover) {
   const fd = openSync(join(directory, name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(fd);
     if (!stat.isFile() || stat.dev !== expected.dev || stat.ino !== expected.ino || stat.nlink !== links || !owned(stat) || (stat.mode & 0o077) || stat.size < 1 || stat.size > MAX_FILE) return { shard: null, stat };
-    const tail = tailIsTerminal(fd, stat.size);
+    const tail = tailIsTerminal(fd, stat.size), quiet = leftover.now - stat.mtimeMs >= leftover.quietMs;
     budget.bytes -= Math.min(TAIL, stat.size);
-    if (tail === false) return { shard: null, stat };
+    if (tail === false && !quiet) return { shard: null, stat };
     budget.bytes -= stat.size;
-    return { shard: closedShard(fd, stat.size, name), stat };
+    const proof = proveReceipt(fd, stat.size, name);
+    if (!proof || (!proof.terminal && !(quiet && leftover.exited(proof.writer)))) return { shard: null, stat };
+    return { shard: proof.shard, stat };
   } finally { closeSync(fd); }
 }
 
@@ -118,7 +126,8 @@ export function scanReceipts(directory) {
  * and has checked `directory` (its lstat is `root`). Bounded by `maxMoves` and `maxBytes` per run.
  * Returns counts; throws only on unexpected errors, which the caller ignores.
  */
-export function archiveClosedReceipts({ directory, root, target, sweep = true, maxMoves = 64, maxBytes = 16 * MAX_FILE }) {
+export function archiveClosedReceipts({ directory, root, target, sweep = true, maxMoves = 64, maxBytes = 16 * MAX_FILE, now = Date.now(), quietMs = QUIET_MS, exited = writer => writerExited(writer) }) {
+  const leftover = { now, quietMs, exited };
   const result = { moved: 0, repaired: 0, collisions: 0, kept: 0 };
   const { count, receipts } = scanReceipts(directory);
   let entries = count, archive, archiveStat;
@@ -134,7 +143,7 @@ export function archiveClosedReceipts({ directory, root, target, sweep = true, m
     if (budget.bytes <= 0) break;
     let finish = false;
     try {
-      const { shard } = inspect(directory, name, stat, 2, budget);
+      const { shard } = inspect(directory, name, stat, 2, budget, leftover);
       if (shard) {
         privateDirectory(archivePath(directory), root.dev); privateDirectory(join(archivePath(directory), shard), root.dev);
         finish = sameInode(lstatSync(join(archivePath(directory), shard, name)), stat) && sameInode(lstatSync(join(directory, name)), stat);
@@ -149,7 +158,7 @@ export function archiveClosedReceipts({ directory, root, target, sweep = true, m
   for (const { name, stat } of candidates) {
     if (entries <= target || result.moved >= maxMoves || budget.bytes <= 0) break;
     let shard;
-    try { ({ shard } = inspect(directory, name, stat, 1, budget)); } catch { shard = null; } // Vanished, swapped or unreadable: keep.
+    try { ({ shard } = inspect(directory, name, stat, 1, budget, leftover)); } catch { shard = null; } // Vanished, swapped or unreadable: keep.
     if (!shard) { result.kept++; continue; }
     const shardPath = shardDirectory(shard);
     if (countUpTo(shardPath, SHARD_LIMIT) >= SHARD_LIMIT) { result.kept++; continue; } // Keep every shard readable by BB.

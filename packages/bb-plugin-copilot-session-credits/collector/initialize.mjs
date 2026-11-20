@@ -7,6 +7,7 @@ export function initializeCollector(pi, { builtinProviders, version, directory, 
   try {
     pi.on('session_start', (_event, ctx) => readiness.start(ctx));
     pi.on('session_shutdown', () => readiness.stop());
+    pi.on('agent_end', () => readiness.maintain());
     const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version ?? '');
     if (!match || Number(match[1]) < 1 || (Number(match[1]) === 1 && Number(match[2]) < 5)) {
       readiness.update('unsupported');

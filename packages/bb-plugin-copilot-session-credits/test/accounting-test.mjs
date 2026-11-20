@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
-import { nanoToAic, displayAic, piUsage, cliUsage, meterState } from '../accounting.mjs';
+import { nanoToAic, displayAic, piUsage as rawPiUsage, cliUsage, meterState, slimRows } from '../accounting.mjs';
+// Every Pi fixture below also proves the host cache's slim rows give the identical result.
+const piUsage = rows => { const full = rawPiUsage(rows); assert.deepEqual(rawPiUsage(slimRows(rows)), full); return full; };
 const results = [], test = (name, f) => { try { f(); results.push({ name, status: 'passed' }); } catch(e) { results.push({ name, status:'failed', message:e.message }); } };
 const id = n => '11111111-1111-4111-8111-' + String(n).padStart(12,'0');
 const start = n => ({kind:'call_started',callId:id(n)});
@@ -54,4 +56,11 @@ test('Fresh Pi recorded amount clears badge without claiming complete billing co
 test('Normal in-flight calls update, then return to Recorded',()=>{assert.equal(meterState(piUsage([start(1)])),'Updating');assert.equal(meterState(piUsage([start(1),obs(1,'0'),end(1)])),'Recorded');});
 test('Missing or conflicting calls and capture failures take priority over Updating',()=>{assert.equal(meterState(piUsage([start(1),end(1),start(2)])),'Missing data');assert.equal(meterState(piUsage([start(1),obs(1,'1'),obs(1,'2'),end(1)])),'Missing data');assert.equal(meterState({...piUsage([]),captureIssue:true}),'Missing data');});
 test('CLI provider coverage remains truthful and unknown is never complete',()=>{assert.equal(meterState(cliUsage({data:{totalNanoAiu:'1',accountingSnapshot:{aiCreditsStatus:'complete'}}})),'Recorded');assert.equal(meterState(cliUsage({data:{totalNanoAiu:'1',accountingSnapshot:{aiCreditsStatus:'partial'}}})),'Missing data');assert.equal(meterState(cliUsage({data:{totalNanoAiu:'1'}})),'Coverage unknown');assert.equal(meterState(cliUsage(null)),'Unavailable');assert.equal(meterState(null),'Loading');});
+test('Slim rows keep latest timestamp, field presence and billing scalars only',()=>{
+  const rows=[{kind:'capture_started',at:'2026-11-01T00:00:00Z',schema:3,epoch:'e'},start(1),{...obs(1,'5'),at:'2026-11-02T00:00:00Z',billing:[{nanoAiu:'5',path:'p',valueType:'string'}],pad:'x'.repeat(100)},{...phased(2,'0','interim'),at:'2026-11-03T00:00:00Z'},{...end(1),outcome:'stop'},{kind:'capture_stopped',at:'2026-11-04T00:00:00Z'}];
+  const slim=slimRows(rows);
+  assert.deepEqual(slim[0],{at:'2026-11-04T00:00:00Z'});assert(!JSON.stringify(slim).includes('pad'));assert(!JSON.stringify(slim).includes('valueType'));
+  assert(!Object.hasOwn(slim.find(row=>row.kind==='observation'&&row.callId===id(1)),'billingPhase'));assert.equal(slim.find(row=>row.callId===id(2)).billingPhase,'interim');
+  piUsage(rows);
+});
 const output=JSON.stringify(results,null,2); if(process.argv[2])writeFileSync(process.argv[2],output); console.log(output);if(results.some(r=>r.status==='failed'))process.exitCode=1;
