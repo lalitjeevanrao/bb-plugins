@@ -1,0 +1,347 @@
+// Hands-off maintenance (issue #21 addendum): leftovers of exited writers, abandoned locks, status leftovers.
+// Offline: synthetic identities and receipts only.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { syncBuiltinESMExports } from 'node:module';
+import { join } from 'node:path';
+import { createProbe } from '../probe.mjs';
+import { createReadiness, readReadiness } from '../readiness.mjs';
+import { validIdentity, writerExited } from '../identity.mjs';
+
+const root = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'pi-maintenance-')));
+const results = [];
+const check = async (name, run) => {
+  try { await run(); results.push({ name, status: 'passed' }); }
+  catch (error) { results.push({ name, status: 'failed', message: error.stack }); }
+};
+const hex = digit => digit.repeat(64);
+const self = { pid: process.pid, machine: hex('1'), boot: hex('2'), pidns: hex('3') };
+const DEAD = 999_001, ALIVE = 999_002;
+const writer = (pid, overrides = {}) => ({ ...self, pid, ...overrides });
+// Exited when the pid is DEAD on this machine and boot; mirrors writerExited with a fake process table.
+const exited = value => writerExited(value, self, pid => pid !== DEAD);
+const SESSION = 'pi_11111111-1111-4111-8111-111111111111';
+const context = { sessionManager: { getSessionId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', getSessionFile: () => `/fixture/${SESSION}.jsonl` }, ui: { notify() {} } };
+const model = { provider: 'github-copilot', api: 'anthropic-messages', id: 'fixture' };
+const privateDir = path => { fs.mkdirSync(path, { recursive: true, mode: 0o700 }); fs.chmodSync(path, 0o700); return path; };
+const minutes = 60_000;
+
+function receipt(directory, { tail = 'capture_stopped', ageMs = 60 * minutes, owner, edit } = {}) {
+  const epoch = randomUUID(), callId = randomUUID(), name = epoch + '.jsonl';
+  const kinds = [['capture_started', { missedCalls: 0, ...(owner ? { writer: owner } : {}) }], ['call_started', { callId }], ['observation', { callId, billing: [{ path: 'copilot_usage.total_nano_aiu', nanoAiu: '1000', valueType: 'string' }] }]];
+  if (tail) kinds.push([tail, { inFlight: 1, dropped: 0 }]);
+  let text = kinds.map(([kind, fields], index) => JSON.stringify({ schema: 3, seq: index + 1, kind, at: '2026-11-01T00:00:00.000Z', epoch, nativeSessionHash: hex('a'), providerSession: SESSION, coverage: 'provider-wrapper-partial', ...fields })).join('\n') + '\n';
+  if (edit) text = edit(text);
+  const path = join(directory, name);
+  fs.writeFileSync(path, text, { mode: 0o600 });
+  const time = new Date(Date.now() - ageMs); fs.utimesSync(path, time, time);
+  return { name, path, text, archived: join(directory + '-archive', SESSION, name) };
+}
+function harness(directory, options = {}) {
+  const hooks = new Map(), commands = new Map();
+  let wrapped, calls = 0;
+  const invoke = () => { calls++; return { result: () => Promise.resolve({ stopReason: 'stop' }) }; };
+  createProbe({ directory, autoStart: true, provider: { id: 'github-copilot', stream: invoke, streamSimple: invoke }, exited, writerIdentity: () => self, ...options })({ on: (name, run) => hooks.set(name, run), registerCommand: (name, value) => commands.set(name, value), registerProvider: value => { wrapped = value; } });
+  hooks.get('session_start')({ reason: 'startup' }, context);
+  return { call: () => wrapped.streamSimple(model, {}, {}).result(), calls: () => calls, agentEnd: () => hooks.get('agent_end')({}, context), newSession: id => hooks.get('session_start')({ reason: 'new' }, { ...context, sessionManager: { ...context.sessionManager, getSessionId: () => id } }) };
+}
+const fresh = directory => fs.readdirSync(directory).filter(name => name.endsWith('.jsonl')).map(name => fs.readFileSync(join(directory, name), 'utf8').split('\n')[0]).filter(line => !line.includes('2026-11-01T00:00:00.000Z')).map(line => JSON.parse(line));
+
+try {
+  await check('writerExited proves exit only on the same machine: earlier boot, or same boot and namespace with no process', () => {
+    assert.equal(writerExited(writer(DEAD), self, () => false), true);
+    assert.equal(writerExited(writer(ALIVE, { boot: hex('9') }), self, () => true), true, 'earlier boot of this machine has ended');
+    assert.equal(writerExited(writer(DEAD), self, () => true), false, 'pid reused or EPERM: alive');
+    assert.equal(writerExited(writer(DEAD, { machine: hex('8') }), self, () => false), false, 'other machine');
+    assert.equal(writerExited(writer(DEAD, { machine: hex('8'), boot: hex('9') }), self, () => false), false, 'other machine, other boot');
+    assert.equal(writerExited(writer(DEAD, { pidns: hex('7') }), self, () => false), false, 'other PID namespace');
+    assert.equal(writerExited(writer(process.pid), self, () => false), false, 'never this process');
+    assert.equal(writerExited(writer(DEAD), null, () => false), false, 'no identity here');
+    for (const bad of [undefined, null, {}, { ...writer(DEAD), machine: 'short' }, { ...writer(DEAD), pid: 0 }, { ...writer(DEAD), pid: 1.5 }]) assert.equal(writerExited(bad, self, () => false), false);
+    assert.equal(validIdentity(self), true);
+  });
+
+  await check('new receipts carry the writer identity in capture_started', async () => {
+    const directory = privateDir(join(root, 'identity')), h = harness(directory);
+    await h.call();
+    assert.deepEqual(fresh(directory)[0].writer, self);
+    const none = privateDir(join(root, 'identity-none')), n = harness(none, { writerIdentity: () => null });
+    await n.call();
+    assert(!Object.hasOwn(fresh(none)[0], 'writer'));
+  });
+
+  await check('leftovers move only when their writer exited and they were unchanged for 10 minutes', async () => {
+    const directory = privateDir(join(root, 'leftovers'));
+    const dead = receipt(directory, { tail: 'capture_checkpoint', owner: writer(DEAD), ageMs: 3 * 24 * 60 * minutes });
+    const deadNoTail = receipt(directory, { tail: null, owner: writer(DEAD), ageMs: 3 * 24 * 60 * minutes + 1 });
+    const keep = [
+      receipt(directory, { tail: 'capture_checkpoint', owner: writer(ALIVE), ageMs: 4 * 24 * 60 * minutes }), // live writer
+      receipt(directory, { tail: 'capture_checkpoint', owner: writer(DEAD), ageMs: 5 * minutes }), // recent
+      receipt(directory, { tail: 'capture_checkpoint', ageMs: 4 * 24 * 60 * minutes }), // pre-change: no writer
+      receipt(directory, { tail: 'capture_checkpoint', owner: writer(DEAD, { machine: hex('8') }), ageMs: 4 * 24 * 60 * minutes }), // other machine
+      receipt(directory, { tail: 'capture_checkpoint', owner: writer(DEAD), ageMs: 4 * 24 * 60 * minutes, edit: text => text.slice(0, -1) }), // torn
+      receipt(directory, { tail: 'capture_checkpoint', owner: writer(DEAD), ageMs: 4 * 24 * 60 * minutes, edit: text => text.replace('"seq":2', '"seq":5') }), // malformed
+    ];
+    const h = harness(directory, { maxFiles: 8 }); // archive from 7 down to 6: up to 2 moves
+    await h.call();
+    for (const file of [dead, deadNoTail]) { assert(!fs.existsSync(file.path), file.name); assert.equal(fs.readFileSync(file.archived, 'utf8'), file.text); }
+    for (const file of keep) assert.equal(fs.readFileSync(file.path, 'utf8'), file.text);
+    assert.equal(fresh(directory).length, 1);
+    // When the only candidate is a recent leftover of an exited writer, it still waits.
+    const quiet = privateDir(join(root, 'leftovers-recent'));
+    const recent = receipt(quiet, { tail: 'capture_checkpoint', owner: writer(DEAD), ageMs: 9 * minutes });
+    const live = [1, 2, 3].map(() => receipt(quiet, { tail: 'capture_checkpoint', owner: writer(ALIVE), ageMs: 3 * 24 * 60 * minutes }));
+    const q = harness(quiet, { maxFiles: 4 });
+    await q.call();
+    assert.equal(fs.readFileSync(recent.path, 'utf8'), recent.text); assert(live.every(file => fs.existsSync(file.path)));
+    assert.equal(fresh(quiet).length, 0); assert.equal(q.calls(), 1);
+  });
+
+  await check('a lock whose owner exited is moved aside and capture resumes; live, unknown and unprovable owners stay', async () => {
+    const lockOf = directory => join(directory, '.capture-lock');
+    const withOwner = (directory, owner, extra = {}) => { privateDir(lockOf(directory)); const instance = randomUUID(); fs.writeFileSync(join(lockOf(directory), 'owner.json'), JSON.stringify({ schema: 1, instance, writer: owner }), { mode: 0o600, ...extra }); return instance; };
+    const directory = privateDir(join(root, 'lock-dead')), instance = withOwner(directory, writer(DEAD));
+    const h = harness(directory);
+    await h.call();
+    assert(!fs.existsSync(lockOf(directory)), 'lock released after recovery');
+    assert(fs.existsSync(join(directory + '-archive', '.broken-locks', instance, 'owner.json')), 'abandoned lock kept as evidence');
+    assert.equal(fresh(directory).length, 1);
+    for (const [label, prepare] of [
+      ['live owner', directory => withOwner(directory, writer(ALIVE))],
+      ['other machine', directory => withOwner(directory, writer(DEAD, { machine: hex('8') }))],
+      ['no owner file', directory => privateDir(lockOf(directory))],
+      ['public owner file', directory => { const id = withOwner(directory, writer(DEAD)); fs.chmodSync(join(lockOf(directory), 'owner.json'), 0o644); return id; }],
+      ['symlinked owner file', directory => { privateDir(lockOf(directory)); const target = join(root, 'owner-' + randomUUID()); fs.writeFileSync(target, JSON.stringify({ schema: 1, instance: randomUUID(), writer: writer(DEAD) }), { mode: 0o600 }); fs.symlinkSync(target, join(lockOf(directory), 'owner.json')); }],
+      ['invalid owner', directory => { privateDir(lockOf(directory)); fs.writeFileSync(join(lockOf(directory), 'owner.json'), '{"schema":1}', { mode: 0o600 }); }],
+    ]) {
+      const directory = privateDir(join(root, 'lock-' + label.replaceAll(' ', '-')));
+      prepare(directory);
+      const before = fs.readdirSync(lockOf(directory)).sort(), h = harness(directory);
+      await h.call(); h.agentEnd();
+      assert.equal(h.calls(), 1, label); assert.deepEqual(fs.readdirSync(lockOf(directory)).sort(), before, label); assert.equal(fresh(directory).length, 0, label);
+    }
+  });
+
+  await check('a late breaker cannot move a fresh lock onto an earlier abandoned one', async () => {
+    const directory = privateDir(join(root, 'lock-late')), instance = randomUUID();
+    privateDir(join(directory + '-archive', '.broken-locks', instance)); fs.writeFileSync(join(directory + '-archive', '.broken-locks', instance, 'owner.json'), '{}', { mode: 0o600 });
+    privateDir(join(directory, '.capture-lock')); fs.writeFileSync(join(directory, '.capture-lock', 'owner.json'), JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 });
+    const h = harness(directory);
+    await h.call();
+    assert(fs.existsSync(join(directory, '.capture-lock', 'owner.json')), 'rename onto a non-empty target fails; the lock stays');
+    assert.equal(fresh(directory).length, 0); assert.equal(h.calls(), 1);
+  });
+
+  await check('a holder records itself in owner.json while it holds the lock, and removes it on release', async () => {
+    const directory = privateDir(join(root, 'lock-owner'));
+    receipt(directory, { tail: 'capture_checkpoint', owner: writer(DEAD), ageMs: 3 * 24 * 60 * minutes });
+    let seen;
+    const spy = value => { seen ??= JSON.parse(fs.readFileSync(join(directory, '.capture-lock', 'owner.json'), 'utf8')); return exited(value); };
+    const h = harness(directory, { maxFiles: 1, exited: spy });
+    await h.call();
+    assert.equal(seen.schema, 1); assert.deepEqual(seen.writer, self); assert.match(seen.instance, /^[a-f0-9-]{36}$/);
+    assert(!fs.existsSync(join(directory, '.capture-lock')));
+  });
+
+  // Status sweep.
+  const status = join(root, 'status'), marker = (session, instance, pid, owner) => {
+    const folder = privateDir(join(status, session)); privateDir(join(status, '.instances'));
+    fs.writeFileSync(join(folder, instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
+    if (owner) fs.writeFileSync(join(status, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: owner }), { mode: 0o600 });
+    return join(folder, instance + '.json');
+  };
+  const old = path => { const time = new Date(Date.now() - 60 * minutes); fs.utimesSync(path, time, time); };
+  const sessionCtx = session => ({ sessionManager: { getSessionId: () => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', getSessionFile: () => `/fixture/${session}.jsonl` }, ui: { notify() {} } });
+
+  await check('status sweep removes dead markers, old temp files and old empty folders; keeps everything ambiguous', () => {
+    const s = n => 'pi_' + String(n).repeat(8) + '-1111-4111-8111-111111111111';
+    const dead = marker(s(2), randomUUID(), DEAD, writer(DEAD));
+    const live = marker(s(3), randomUUID(), ALIVE, writer(ALIVE));
+    const legacy = marker(s(4), randomUUID(), DEAD); // pre-change marker: no identity record
+    const mismatch = marker(s(5), randomUUID(), ALIVE, writer(DEAD)); // record pid differs from marker pid
+    const temp = join(privateDir(join(status, s(6))), '.ready-x-y'); fs.writeFileSync(temp, '{}', { mode: 0o600 }); old(temp);
+    const recentTemp = join(privateDir(join(status, s(7))), '.ready-x-z'); fs.writeFileSync(recentTemp, '{}', { mode: 0o600 });
+    const emptyOld = privateDir(join(status, s(8))); old(emptyOld);
+    const emptyRecent = privateDir(join(status, s(9)));
+    fs.writeFileSync(join(status, s(2), 'notes.txt'), 'foreign', { mode: 0o600 });
+    const legacyRoot = privateDir(join(root, 'session-credits-status')); fs.writeFileSync(join(legacyRoot, 'x'), 'legacy');
+    const readiness = createReadiness(status, '1.5.2', { exited, writerIdentity: () => self, random: () => 0 });
+    readiness.start(sessionCtx('pi_00000000-0000-4000-8000-000000000000'));
+    assert(!fs.existsSync(dead)); assert(!fs.existsSync(join(status, '.instances', dead.split('/').at(-1))), 'its identity record goes with it');
+    assert(fs.existsSync(live)); assert(fs.existsSync(legacy)); assert(fs.existsSync(mismatch));
+    assert(!fs.existsSync(temp)); assert(fs.existsSync(recentTemp));
+    assert(!fs.existsSync(emptyOld)); assert(fs.existsSync(emptyRecent));
+    assert(fs.existsSync(join(status, s(2), 'notes.txt')));
+    assert.deepEqual(fs.readdirSync(legacyRoot), ['x']);
+    assert.equal(readReadiness(status, 'pi_00000000-0000-4000-8000-000000000000').state, 'ready', 'own marker untouched');
+    const own = fs.readdirSync(join(status, '.instances'));
+    assert(own.length >= 1);
+    readiness.stop();
+    assert.equal(fs.readdirSync(join(status, '.instances')).length, own.length - 1, 'own identity record removed on stop');
+  });
+
+  await check('status sweep is bounded, runs at most every 10 minutes, and reaches every folder across restarts', () => {
+    const many = join(root, 'status-many'), ids = Array.from({ length: 600 }, (_, n) => 'thr_fixture' + String(n).padStart(4, '0'));
+    const markers = ids.map(session => { const folder = privateDir(join(many, session)), instance = randomUUID(); privateDir(join(many, '.instances')); fs.writeFileSync(join(folder, instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 }); fs.writeFileSync(join(many, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(DEAD) }), { mode: 0o600 }); return join(folder, instance + '.json'); });
+    const remaining = () => markers.filter(path => fs.existsSync(path)).length;
+    let clock = Date.now(), offset = 0;
+    const first = createReadiness(many, '1.5.2', { exited, writerIdentity: () => self, now: () => clock, random: () => offset });
+    first.start(sessionCtx('thr_ownfixture'));
+    assert.equal(remaining(), 600 - 256, 'at most 256 folders per run');
+    offset = 0.5; first.maintain(); assert.equal(remaining(), 600 - 256, 'inside 10 minutes nothing runs, even where work is left');
+    clock += 11 * minutes; offset = 0.5; first.maintain(); assert(remaining() < 600 - 256, 'agent_end sweeps again later');
+    for (const value of [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9]) { offset = value; const next = createReadiness(many, '1.5.2', { exited, writerIdentity: () => self, now: () => clock, random: () => offset }); next.start(sessionCtx('thr_ownfixture')); next.stop(); }
+    assert.equal(remaining(), 0, 'restarts at other offsets reach every folder');
+    first.stop();
+  });
+
+  await check('a marker write survives a sweep removing its session folder between ensure and rename', () => {
+    const dir = join(root, 'status-race'), session = 'pi_12121212-1212-4121-8121-121212121212';
+    const readiness = createReadiness(dir, '1.5.2', { exited, writerIdentity: () => self });
+    const original = fs.renameSync; let raced = false;
+    fs.renameSync = (from, to) => { if (!raced && to.includes(session)) { raced = true; fs.rmSync(join(dir, session), { recursive: true }); } return original(from, to); };
+    syncBuiltinESMExports();
+    try { readiness.start(sessionCtx(session)); } finally { fs.renameSync = original; syncBuiltinESMExports(); }
+    assert(raced); assert.equal(readReadiness(dir, session).state, 'ready');
+    readiness.stop();
+  });
+
+
+  await check('large ineligible receipts never starve later candidates (cheap head check, then remembered validations)', async () => {
+    const big = 'x'.repeat(220_000), pad = text => text.replace('"kind":"call_started"', `"kind":"call_started","pad":"${big}"`).replace('"kind":"observation"', `"kind":"observation","pad":"${big}"`);
+    // Rows near the end stay small, as the collector writes them, so the 4 KiB tail window decides.
+    // Old checkpoint-only receipts without a writer: rejected from 8 KiB each, without a full read.
+    const first = privateDir(join(root, 'starve-head'));
+    const leftovers = Array.from({ length: 40 }, () => receipt(first, { tail: 'capture_checkpoint', ageMs: 30 * 24 * 60 * minutes, edit: pad }));
+    const closed = Array.from({ length: 216 }, () => receipt(first));
+    assert(leftovers.every(file => fs.statSync(file.path).size > 400_000)); // 40 of them: more than one sweep's 16 MiB
+    await harness(first).call();
+    assert.equal(closed.filter(file => !fs.existsSync(file.path)).length, 64); assert(leftovers.every(file => fs.existsSync(file.path)));
+    assert.equal(fresh(first).length, 1);
+    // Old malformed closed receipts need a full read each; the next sweep reuses those validations.
+    const second = privateDir(join(root, 'starve-memo'));
+    const malformed = Array.from({ length: 40 }, () => receipt(second, { ageMs: 30 * 24 * 60 * minutes, edit: text => pad(text).replace('"seq":2', '"seq":9') }));
+    const good = Array.from({ length: 216 }, () => receipt(second));
+    let clock = Date.now();
+    const h = harness(second, { now: () => clock });
+    await h.call();
+    const firstPass = good.filter(file => !fs.existsSync(file.path)).length;
+    assert.equal(firstPass, 0, 'the first sweep spends its budget on the malformed receipts');
+    clock += 61_000; h.newSession('cccccccc-cccc-4ccc-8ccc-cccccccccccc'); await h.call();
+    assert.equal(good.filter(file => !fs.existsSync(file.path)).length, 64, 'the next sweep reuses those validations and reaches the rest');
+    assert(fs.readdirSync(second).length <= 193); assert(malformed.every(file => fs.existsSync(file.path)));
+  });
+
+  await check('a lock release that fails once is finished by the same process on its next attempt', async () => {
+    const { syncBuiltinESMExports } = await import('node:module');
+    for (const target of ['owner.json', '.capture-lock']) {
+      const directory = privateDir(join(root, 'release-' + target.replace('.', ''))), h = harness(directory);
+      const unlink = fs.unlinkSync, rmdir = fs.rmdirSync;
+      let failed = false;
+      const fault = (original, match) => (path, ...rest) => { if (!failed && String(path).endsWith(match)) { failed = true; const error = new Error('injected'); error.code = 'EIO'; throw error; } return original(path, ...rest); };
+      if (target === 'owner.json') fs.unlinkSync = fault(unlink, 'owner.json'); else fs.rmdirSync = fault(rmdir, '.capture-lock');
+      syncBuiltinESMExports();
+      try { await h.call(); } finally { fs.unlinkSync = unlink; fs.rmdirSync = rmdir; syncBuiltinESMExports(); }
+      assert(failed, target);
+      // The first release retries once at once; a fault that persists past both leaves the lock for the next attempt.
+      h.newSession('dddddddd-dddd-4ddd-8ddd-dddddddddddd'); await h.call();
+      assert(!fs.existsSync(join(directory, '.capture-lock')), target + ': lock released');
+      assert.equal(fresh(directory).length, 2, target + ': the next capture allocates');
+    }
+    // A fault on both immediate tries: the lock stays until this process's next attempt finishes it.
+    const directory = privateDir(join(root, 'release-twice')), h = harness(directory), rmdir = fs.rmdirSync;
+    let faults = 0;
+    fs.rmdirSync = (path, ...rest) => { if (String(path).endsWith('.capture-lock') && faults < 2) { faults++; const error = new Error('injected'); error.code = 'EIO'; throw error; } return rmdir(path, ...rest); };
+    syncBuiltinESMExports();
+    try { await h.call(); } finally { fs.rmdirSync = rmdir; syncBuiltinESMExports(); }
+    assert(fs.existsSync(join(directory, '.capture-lock')), 'left behind after two faults');
+    const other = harness(directory); await other.call();
+    assert(fs.existsSync(join(directory, '.capture-lock')), 'another live process never takes it');
+    h.newSession('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'); await h.call();
+    assert(!fs.existsSync(join(directory, '.capture-lock'))); assert.equal(fresh(directory).length, 2);
+  });
+
+  await check('status sweep reaches a dead marker behind many foreign entries in one folder', () => {
+    const dir = join(root, 'status-crowded'), session = 'pi_34343434-3434-4343-8343-343434343434', folder = privateDir(join(dir, session));
+    for (let n = 0; n < 1024; n++) fs.writeFileSync(join(folder, 'aaa-foreign-' + n), '');
+    privateDir(join(dir, '.instances'));
+    const instance = randomUUID(), path = join(folder, instance + '.json');
+    fs.writeFileSync(path, JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
+    fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(DEAD) }), { mode: 0o600 });
+    const readiness = createReadiness(dir, '1.5.2', { exited, writerIdentity: () => self, random: () => 0 });
+    readiness.start(sessionCtx('pi_00000000-0000-4000-8000-000000000000'));
+    assert(!fs.existsSync(path)); assert.equal(fs.readdirSync(folder).length, 1024, 'foreign entries untouched');
+    readiness.stop();
+  });
+
+  await check('an uncertain error while finishing a pending release keeps it pending until the lock is proven gone or released', async () => {
+    const { syncBuiltinESMExports } = await import('node:module');
+    const directory = privateDir(join(root, 'release-uncertain')), h = harness(directory), rmdir = fs.rmdirSync, lstat = fs.lstatSync;
+    let rmdirFaults = 0, lstatFault = false;
+    fs.rmdirSync = (path, ...rest) => { if (String(path).endsWith('.capture-lock') && rmdirFaults < 2) { rmdirFaults++; const error = new Error('injected'); error.code = 'EIO'; throw error; } return rmdir(path, ...rest); };
+    fs.lstatSync = (path, ...rest) => { if (lstatFault && String(path).endsWith('.capture-lock')) { lstatFault = false; const error = new Error('injected'); error.code = 'EIO'; throw error; } return lstat(path, ...rest); };
+    syncBuiltinESMExports();
+    try {
+      await h.call();
+      assert(fs.existsSync(join(directory, '.capture-lock')));
+      lstatFault = true; h.newSession('f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1'); await h.call();
+      assert(!lstatFault, 'the fault fired'); assert(fs.existsSync(join(directory, '.capture-lock')), 'still pending, not forgotten');
+      h.newSession('f2f2f2f2-f2f2-4f2f-8f2f-f2f2f2f2f2f2'); await h.call();
+    } finally { fs.rmdirSync = rmdir; fs.lstatSync = lstat; syncBuiltinESMExports(); }
+    assert(!fs.existsSync(join(directory, '.capture-lock'))); assert.equal(fresh(directory).length, 2);
+  });
+
+  await check('status sweep reaches dead markers anywhere in a folder of any size, a uniform sample per run', () => {
+    const dir = join(root, 'status-huge'), session = 'pi_56565656-5656-4565-8565-565656565656', folder = privateDir(join(dir, session));
+    for (let n = 0; n < 6000; n++) fs.writeFileSync(join(folder, 'foreign-' + n), '');
+    privateDir(join(dir, '.instances'));
+    const markers = Array.from({ length: 200 }, () => {
+      const instance = randomUUID(), path = join(folder, instance + '.json');
+      fs.writeFileSync(path, JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
+      fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(DEAD) }), { mode: 0o600 });
+      return path;
+    });
+    let clock = Date.now(), seed = 7;
+    const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const readiness = createReadiness(dir, '1.5.2', { exited, writerIdentity: () => self, now: () => clock, random });
+    readiness.start(sessionCtx('pi_00000000-0000-4000-8000-000000000000'));
+    assert.equal(markers.filter(path => fs.existsSync(path)).length, 200 - 64, 'at most 64 per folder per run');
+    for (let run = 0; run < 3; run++) { clock += 11 * minutes; readiness.maintain(); }
+    assert.equal(markers.filter(path => fs.existsSync(path)).length, 0); assert.equal(fs.readdirSync(folder).length, 6000);
+    // 200 live markers stay forever; a fair sample still reaches the one dead marker among them.
+    const live = Array.from({ length: 200 }, () => { const instance = randomUUID(); fs.writeFileSync(join(folder, instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid: ALIVE, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 }); fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(ALIVE) }), { mode: 0o600 }); return instance; });
+    const instance = randomUUID(), dead = join(folder, instance + '.json');
+    fs.writeFileSync(dead, JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
+    fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(DEAD) }), { mode: 0o600 });
+    for (let run = 0; run < 40 && fs.existsSync(dead); run++) { clock += 11 * minutes; readiness.maintain(); }
+    assert(!fs.existsSync(dead), 'reached behind persistent candidates'); assert.equal(live.filter(id => fs.existsSync(join(folder, id + '.json'))).length, 200);
+    readiness.stop();
+  });
+
+  await check('identity records left by a crash before their marker are removed once the writer exited; records still backing a marker stay', () => {
+    const dir = join(root, 'status-orphans'), records = privateDir(join(dir, '.instances'));
+    const session = 'pi_78787878-7878-4787-8787-787878787878';
+    const record = (owner, extra = {}) => { const instance = randomUUID(), path = join(records, instance + '.json'); fs.writeFileSync(path, JSON.stringify({ schema: 1, instance, providerSession: session, writer: owner, ...extra }), { mode: 0o600 }); return { instance, path }; };
+    const orphan = record(writer(DEAD));
+    const liveOrphan = record(writer(ALIVE));
+    const backing = record(writer(DEAD)); // Its marker exists but cannot be removed (pid differs), so the record must stay as proof.
+    fs.writeFileSync(join(privateDir(join(dir, session)), backing.instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid: ALIVE, instance: backing.instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
+    const legacy = (() => { const instance = randomUUID(), path = join(records, instance + '.json'); fs.writeFileSync(path, JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 }); return path; })();
+    const oldTemp = join(records, '.ready-old'), newTemp = join(records, '.ready-new');
+    fs.writeFileSync(oldTemp, '{}', { mode: 0o600 }); old(oldTemp); fs.writeFileSync(newTemp, '{}', { mode: 0o600 });
+    const readiness = createReadiness(dir, '1.5.2', { exited, writerIdentity: () => self, random: () => 0 });
+    readiness.start(sessionCtx('pi_00000000-0000-4000-8000-000000000000'));
+    assert(!fs.existsSync(orphan.path), 'orphan of an exited writer removed');
+    assert(fs.existsSync(liveOrphan.path), 'live writer kept');
+    assert(fs.existsSync(backing.path), 'record backing an existing marker kept');
+    assert(fs.existsSync(legacy), 'record in an unknown shape kept');
+    assert(!fs.existsSync(oldTemp)); assert(fs.existsSync(newTemp));
+    const own = JSON.parse(fs.readFileSync(join(records, fs.readdirSync(records).find(name => ![orphan, liveOrphan, backing].some(r => name === r.instance + '.json') && name.endsWith('.json') && join(records, name) !== legacy)), 'utf8'));
+    assert.equal(own.providerSession, 'pi_00000000-0000-4000-8000-000000000000', 'own record names its session');
+    readiness.stop();
+  });
+  console.log(JSON.stringify(results, null, 2));
+  if (results.some(row => row.status === 'failed')) process.exitCode = 1;
+} finally { fs.rmSync(root, { recursive: true, force: true }); }

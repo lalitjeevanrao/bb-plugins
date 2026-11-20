@@ -24,6 +24,23 @@ export function meterState(usage) {
 }
 const base = source => ({ aic: null, source, captureIssue: false, coverage: 'unavailable', reported: 0, observed: 0, inFlight: 0, conflicting: 0, missing: 0, updatedAt: null, reason: 'No billing data recorded' });
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+// The fields `piUsage` reads, so the host can cache receipts compactly. Field presence is kept as is
+// (`billingPhase` absence matters); non-call rows collapse into one row carrying the latest valid `at`.
+const CALL_FIELDS = ['kind', 'callId', 'outcome', 'api', 'eventType', 'billingPhase', 'responseHash'];
+export function slimRows(rows) {
+  let latest = null;
+  const out = [];
+  for (const row of rows) {
+    if (typeof row.at === 'string' && Number.isFinite(Date.parse(row.at)) && (!latest || row.at > latest)) latest = row.at;
+    if (!uuid.test(row.callId ?? '')) continue;
+    const slim = {};
+    for (const field of CALL_FIELDS) if (Object.hasOwn(row, field)) slim[field] = row[field];
+    if (Object.hasOwn(row, 'billing')) slim.billing = Array.isArray(row.billing) ? row.billing.map(value => value !== null && typeof value === 'object' ? Object.fromEntries(['nanoAiu', 'invalid', 'missingAmount'].filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]])) : value) : row.billing;
+    out.push(slim);
+  }
+  if (latest) out.unshift({ at: latest });
+  return out;
+}
 // Input has already passed host file/identity/sequence validation.
 export function piUsage(records) {
   const result = base('pi-receipts'), calls = new Map();

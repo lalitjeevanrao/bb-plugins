@@ -1,6 +1,8 @@
-import { constants, mkdirSync, rmdirSync, unlinkSync, lstatSync, realpathSync, fstatSync, readdirSync, openSync, writeSync, closeSync } from 'node:fs';
+import { constants, mkdirSync, rmdirSync, unlinkSync, lstatSync, realpathSync, fstatSync, readdirSync, readSync, openSync, writeSync, closeSync, renameSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
+import { archiveClosedReceipts, archiveLimits, archivePath, privateDirectory, scanReceipts } from './archive.mjs';
+import { processIdentity, validIdentity, writerExited } from './identity.mjs';
 
 const APIS = new Set(['openai-responses', 'openai-completions', 'anthropic-messages']);
 const TYPES = new Set(['response.created', 'response.completed', 'response.incomplete', 'response.failed', 'error', 'chat.completion.chunk', 'message_start', 'message_delta', 'message_stop', 'copilot_usage']);
@@ -38,18 +40,97 @@ function chatBillingPhase(data) {
   if (choice.finish_reason == null) return 'interim';
   return ['stop', 'length', 'tool_calls', 'function_call'].includes(choice.finish_reason) ? 'final' : 'unknown';
 }
-// All schema-3 writers reserve files under the same atomic mkdir lock. No evidence is deleted.
-function openCapture(directory, epoch, maxFiles) {
+function checkRoot(directory) {
   if (realpathSync(dirname(directory)) !== dirname(directory)) throw new Error('Canonical parent required');
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
   const dir = lstatSync(directory);
   if (realpathSync(directory) !== directory || !dir.isDirectory() || dir.isSymbolicLink() || (dir.mode & 0o077) !== 0 || (process.getuid && dir.uid !== process.getuid())) throw new Error('Private directory required');
-  const lock = join(directory, '.capture-lock'), file = join(directory, `${epoch}.jsonl`);
-  let locked = false, fd, fileStat;
+  return dir;
+}
+// The lock holder's identity lives in `.capture-lock/owner.json`, so a lock left by a crashed process can be
+// proven abandoned. A lock without a readable owner (older collectors, or a crash right after mkdir) is never broken.
+const LOCK_OWNER = 'owner.json';
+function readLockOwner(lock) {
+  const fd = openSync(join(lock, LOCK_OWNER), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
-    // ponytail: skip contended calls, retry next call; never steal a crash-left lock.
-    try { mkdirSync(lock, { mode: 0o700 }); } catch (error) { if (error.code === 'EEXIST') return undefined; throw error; } locked = true;
-    if (readdirSync(directory).filter(name => name !== '.capture-lock').length >= maxFiles) throw new Error('Capture directory full');
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1 || (process.getuid && stat.uid !== process.getuid()) || (stat.mode & 0o077) || stat.size < 1 || stat.size > 1024) return null;
+    const buffer = Buffer.alloc(stat.size);
+    let offset = 0;
+    while (offset < buffer.length) { const size = readSync(fd, buffer, offset, buffer.length - offset, offset); if (!size) break; offset += size; }
+    const owner = JSON.parse(buffer.subarray(0, offset).toString('utf8'));
+    return owner?.schema === 1 && UUID.test(owner.instance ?? '') && validIdentity(owner.writer) ? owner : null;
+  } finally { closeSync(fd); }
+}
+// Moves a lock whose owner provably exited to `<archive>/.broken-locks/<owner instance>`. That target is never
+// removed, so a second, late attempt to move a fresh lock onto the same name fails instead of stealing it.
+function breakAbandonedLock(directory, root, exited) {
+  const lock = join(directory, '.capture-lock'), owner = readLockOwner(lock);
+  if (!owner || !exited(owner.writer)) return false;
+  const archive = archivePath(directory), broken = join(archive, '.broken-locks');
+  for (const path of [archive, broken]) {
+    try { mkdirSync(path, { mode: 0o700 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    privateDirectory(path, root.dev);
+  }
+  renameSync(lock, join(broken, owner.instance));
+  return true;
+}
+// Runs `work` under the shared `.capture-lock`. Returns 'busy' when a live (or unprovable) holder has it.
+// `state.unreleased` remembers a lock this process failed to release (an I/O error on unlink or rmdir); the next
+// attempt finishes that release first, after checking it is still the same lock directory and owner file.
+function withLock(directory, root, state, work) {
+  const { instance, exited, identity } = state;
+  const lock = join(directory, '.capture-lock'), ownerFile = join(lock, LOCK_OWNER), writer = identity(); // Probe identity before holding the lock.
+  const acquire = () => { try { mkdirSync(lock, { mode: 0o700 }); return true; } catch (error) { if (error.code === 'EEXIST') return false; throw error; } };
+  const release = held => {
+    try {
+      if (held.ownerIno !== undefined) {
+        try { const owner = lstatSync(ownerFile); if (owner.isFile() && owner.ino === held.ownerIno) unlinkSync(ownerFile); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+      }
+      rmdirSync(lock);
+      return true;
+    } catch { return false; }
+  };
+  const finishUnreleased = () => {
+    const held = state.unreleased;
+    if (!held) return false;
+    // Forget the pending release only when the lock is provably gone or replaced; keep it on any other error.
+    let current;
+    try { current = lstatSync(lock); } catch (error) { if (error.code === 'ENOENT') state.unreleased = undefined; return false; }
+    if (current.ino !== held.lockIno) { state.unreleased = undefined; return false; }
+    if (!release(held)) return false;
+    state.unreleased = undefined;
+    return true;
+  };
+  // ponytail: skip contended calls, retry next call; never steal a lock by age.
+  if (!acquire()) {
+    try { if (!(finishUnreleased() || breakAbandonedLock(directory, root, exited)) || !acquire()) return 'busy'; } catch { return 'busy'; }
+  }
+  const held = { lockIno: undefined, ownerIno: undefined };
+  try { held.lockIno = lstatSync(lock).ino; } catch {}
+  if (writer) {
+    try {
+      const fd = openSync(ownerFile, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      try { held.ownerIno = fstatSync(fd).ino; writeSync(fd, JSON.stringify({ schema: 1, instance, writer })); } finally { closeSync(fd); }
+    } catch {}
+  }
+  try { return work(); }
+  finally { if (!release(held) && !release(held)) state.unreleased = held; }
+}
+// All schema-3 writers reserve files under the same atomic mkdir lock. Maintenance moves closed receipts
+// under that lock before the cap check; no evidence is deleted. Returns an fd, 'busy' or 'full'.
+function openCapture(directory, epoch, maxFiles, lock, maintain = () => {}) {
+  if (realpathSync(dirname(directory)) !== dirname(directory)) throw new Error('Canonical parent required');
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const dir = checkRoot(directory);
+  return withLock(directory, dir, lock, () => allocate(directory, dir, epoch, maxFiles, maintain));
+}
+function allocate(directory, dir, epoch, maxFiles, maintain) {
+  const file = join(directory, `${epoch}.jsonl`);
+  let fd, fileStat;
+  try {
+    try { maintain(dir); } catch {} // Maintenance never blocks or fails a capture.
+    if (readdirSync(directory).filter(name => name !== '.capture-lock').length >= maxFiles) return 'full';
     fd = openSync(file, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     fileStat = fstatSync(fd);
     const after = lstatSync(directory);
@@ -66,15 +147,38 @@ function openCapture(directory, epoch, maxFiles) {
       try { closeSync(fd); } catch {}
     }
     throw error;
-  } finally { if (locked) { try { rmdirSync(lock); } catch {} } }
+  }
 }
 
-export function createProbe({ directory, provider, autoStart = false, maxBytes = 1_048_576, maxRecords = 10_000, maxFiles = 256, onStatus = () => {} }) {
+export function createProbe({ directory, provider, autoStart = false, maxBytes = 1_048_576, maxRecords = 10_000, maxFiles = 256, onStatus = () => {}, now = Date.now, archiveIntervalMs = 600_000, archiveBackoffMs = 60_000, exited = writer => writerExited(writer), writerIdentity = processIdentity }) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 512 || !Number.isSafeInteger(maxRecords) || maxRecords < 1 || !Number.isSafeInteger(maxFiles) || maxFiles < 1 || maxFiles > 256) throw new Error('Invalid capture limits');
   if (provider?.id !== 'github-copilot' || typeof provider.stream !== 'function' || typeof provider.streamSimple !== 'function') throw new Error('Native Copilot provider required');
   directory = resolve(directory);
+  const { archiveTo, archiveAt } = archiveLimits(maxFiles);
+  const lock = { instance: randomUUID(), exited, identity: writerIdentity };
+  const proofs = new Map(); // Receipt validations, reused while a file is unchanged.
   return pi => {
-    let enabled = autoStart, base, capture, failed = false, missedCalls = 0;
+    let enabled = autoStart, base, capture, failed = false, missedCalls = 0, lastMiss, sweepAfter = 0, periodicAfter = 0;
+    // Under the lock: always finish interrupted moves; sweep closed receipts from `archiveAt` down to
+    // `archiveTo`, backing off after a sweep that moved nothing. Errors are ignored by the callers.
+    const maintain = (root, periodic = false) => {
+      const { count, needsRepair } = scanReceipts(directory), time = now();
+      const sweep = count >= archiveAt && time >= sweepAfter && (!periodic || time >= periodicAfter);
+      if (!needsRepair && !sweep) return;
+      if (sweep && periodic) periodicAfter = time + archiveIntervalMs;
+      let result;
+      try { result = archiveClosedReceipts({ directory, root, target: archiveTo, sweep, now: time, exited, memo: proofs }); }
+      finally { if (sweep && !result?.moved) sweepAfter = time + archiveBackoffMs; }
+    };
+    // Periodic maintenance while enabled: an unlocked lstat scan each turn, the lock only when there is work.
+    const periodic = () => {
+      if (!enabled || failed) return;
+      let root;
+      try { root = checkRoot(directory); } catch { return; } // Never create the root here.
+      const { count, needsRepair } = scanReceipts(directory), time = now();
+      if (!needsRepair && !(count >= archiveAt && time >= sweepAfter && time >= periodicAfter)) return;
+      withLock(directory, root, lock, () => maintain(root, true));
+    };
     const status = () => { try { onStatus(!enabled ? 'disabled' : failed ? 'error' : 'ready'); } catch {} };
     const fail = () => { failed = true; status(); };
     const guard = run => (event, ctx) => { try { run(event, ctx); } catch { fail(); } };
@@ -94,8 +198,10 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
       if (capture) return capture;
       const epoch = randomUUID(), identity = { epoch, nativeSessionHash: base.nativeSessionHash, providerSession: base.providerSession };
       let fd;
-      try { fd = openCapture(directory, epoch, maxFiles); } catch { fail(); return undefined; }
-      if (fd === undefined) { missedCalls++; return undefined; }
+      try { fd = openCapture(directory, epoch, maxFiles, lock, root => maintain(root)); } catch { fail(); return undefined; }
+      // Busy or full: the provider call still runs without a receipt; the next call retries.
+      if (fd === 'busy' || fd === 'full') { missedCalls++; lastMiss = fd; return undefined; }
+      lastMiss = undefined;
       let bytes = 0, records = 0, dropped = 0, rawEvents = 0, amountObservations = 0, truncated = false, inFlight = 0;
       const close = () => { if (fd !== undefined) { try { closeSync(fd); } catch {} fd = undefined; } };
       const write = (kind, fields = {}) => {
@@ -136,7 +242,8 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
           }
         }
       };
-      write('capture_started', { source: 'native-provider-wrapper', billingSemantics: 'unverified', missedCalls, reason: base.reason, previousSession: base.previousSession, ...capture.counts() });
+      const writer = writerIdentity();
+      write('capture_started', { ...(writer ? { writer } : {}), source: 'native-provider-wrapper', billingSemantics: 'unverified', missedCalls, reason: base.reason, previousSession: base.previousSession, ...capture.counts() });
       return capture;
     };
     const wrap = method => (model, context, options) => {
@@ -163,7 +270,10 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
     pi.registerProvider({ ...provider, stream: wrap('stream'), streamSimple: wrap('streamSimple') });
     // No provider_stream_event collector: it would duplicate the wrapper's observations.
     pi.on('session_start', guard((event, ctx) => { setSession(event, ctx); status(); }));
-    pi.on('agent_end', guard(() => { if (capture) capture.write('capture_checkpoint', capture.counts()); }));
+    pi.on('agent_end', guard(() => {
+      if (capture) capture.write('capture_checkpoint', capture.counts());
+      try { periodic(); } catch {} // Maintenance never fails capture.
+    }));
     pi.on('session_shutdown', guard(event => { stop(REASONS.has(event.reason) ? event.reason : 'unknown'); base = undefined; }));
     pi.registerCommand('copilot-probe', {
       description: 'Local credit probe: on, off, status (never invokes model)',
@@ -175,7 +285,7 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
         status();
         if (capture) capture.write('capture_status', capture.counts());
         const counts = capture?.counts(), contended = enabled && !capture && missedCalls > 0;
-        ctx.ui.notify(`Copilot probe: ${enabled ? failed ? 'capture-error' : contended ? 'capture-contended' : 'on' : 'off'}; observations=${counts?.amountObservations ?? 0}; missedCalls=${missedCalls}; dropped=${counts?.dropped ?? 0}; coverage=partial`, failed || contended ? 'warning' : 'info');
+        ctx.ui.notify(`Copilot probe: ${enabled ? failed ? 'capture-error' : contended ? lastMiss === 'full' ? 'collector-full' : 'capture-contended' : 'on' : 'off'}; observations=${counts?.amountObservations ?? 0}; missedCalls=${missedCalls}; dropped=${counts?.dropped ?? 0}; coverage=partial`, failed || contended ? 'warning' : 'info');
       }
     });
   };
