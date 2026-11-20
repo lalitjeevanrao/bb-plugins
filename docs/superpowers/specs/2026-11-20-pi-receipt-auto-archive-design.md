@@ -1,6 +1,6 @@
 # Auto-archive closed Pi receipts (issue #21)
 
-Status: approved with changes by the gate-1 review (BB thread thr_prbazitgcf); its five findings are applied below. Scope: `copilot-session-credits` Pi collector and host reader.
+Status: approved with changes by the gate-1 review; its five findings are applied below. Scope: `copilot-session-credits` Pi collector and host reader.
 
 ## Problem
 
@@ -154,7 +154,7 @@ Status markers already carry `pid`. Crashes leave markers and empty session dire
 - Host cache: a second read of an unchanged archived receipt reads no bytes (a spy on `open`). An appended or replaced file is read again. A thread over 8 MiB converges to the full total within a few refreshes. The LRU cap holds.
 - Status sweep: dead markers and old temp files are removed. Live, invalid and own markers stay. Empty old directories are removed, recent or non-empty ones stay, and the legacy root is untouched. A concurrent `write()` after an `rmdir` still lands.
 
-### Addendum review changes (GPT-6.1-Sol review, thread thr_v4pys6bevm)
+### Addendum review changes (GPT-6.1-Sol review)
 
 **Process identity replaces the hostname hash.** `collector/identity.mjs` computes once per process, lazily:
 
@@ -182,7 +182,7 @@ A writer is **dead** only when its identity has the same `machine` as this proce
 - Empty session directories and `.ready-*` temp files unchanged for 10 minutes are removed.
 - The sweep runs on `session_start` and `agent_end`, at most every 10 minutes per process. It starts at a random offset in the sorted directory list and wraps around, so restarts cover all directories over time without stored state. The bounds stay at 256 directories and 1024 files per run.
 
-### Gate-2 review changes (GPT-6.1-Sol, thread thr_dniu77xqj4)
+### Gate-2 review changes (GPT-6.1-Sol)
 
 The review rejected ec408f6 for three reproduced stalls. All three are fixed, each with a regression test that fails without the fix.
 
@@ -192,7 +192,8 @@ The review rejected ec408f6 for three reproduced stalls. All three are fixed, ea
 
 The surviving mutant "status timer ignored" is now caught: the test changes the start offset inside the 10-minute window.
 
-Re-review of 4cb7aa4 (same thread): the three stalls recover. Two follow-ups are fixed:
+Re-review of 4cb7aa4 (same reviewer): the three stalls recover. Two follow-ups are fixed:
 
 - A pending release is forgotten only when `lstat` shows the lock is gone (`ENOENT`) or replaced (different inode). Any other error keeps it pending.
 - The status sweep lists each folder in full (up to 1,000,000 entries) and keeps a uniform reservoir sample of at most 64 candidates. No position can starve, even behind persistent live markers.
+Final re-review of f81193b: approved, no findings.
