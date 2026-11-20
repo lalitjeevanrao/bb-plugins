@@ -7,7 +7,7 @@
 
 ## Automatic archive
 
-The collector keeps at most 256 entries in its receipt folder. When the folder reaches 224 entries, it moves the oldest **closed** receipts to a private archive next to it, until 192 entries remain. It does this before allocating a new receipt and, while capture is enabled, after a Pi turn ends (at most every 10 minutes). It works under the same `.capture-lock` as allocation, skips a busy lock and never removes one. A run moves at most 64 receipts and reads at most 16 MiB.
+The collector keeps at most 256 entries in its receipt folder. When the folder reaches 224 entries, it moves the oldest **closed** receipts to a private archive next to it, until 192 entries remain. It does this before allocating a new receipt and, while capture is enabled, after a Pi turn ends (at most every 10 minutes). It works under the same `.capture-lock` as allocation, skips a busy lock and never removes one. A run moves at most 64 receipts and reads at most 16 MiB. It rejects most ineligible receipts from their first and last 4 KiB, and remembers its checks of unchanged receipts, so large ineligible files cannot block the rest.
 
 Two kinds of receipt can move. Every line must be a valid schema-3 row with contiguous `seq` and one identity, and the first row must be `capture_started` for the file's own epoch.
 
@@ -27,7 +27,7 @@ BB reads the capture folder, then only the shards of the requested sessions, the
 
 ## Abandoned allocation lock
 
-A collector holding `.capture-lock` records itself in `.capture-lock/owner.json`. If that process crashes while holding the lock, the next collector proves it exited (as above) and moves the whole lock to `copilot-session-credits-archive/.broken-locks/<instance>`, then continues. Those small folders are kept as a record. A lock without a readable owner, for example one held by an older collector, is never moved: wait for it, or stop all Pi processes and remove it.
+A collector holding `.capture-lock` records itself in `.capture-lock/owner.json`. If that process crashes while holding the lock, the next collector proves it exited (as above) and moves the whole lock to `copilot-session-credits-archive/.broken-locks/<instance>`, then continues. Those small folders are kept as a record. If a collector fails to release its own lock because of a transient I/O error, it finishes the release on its next attempt. A lock without a readable owner, for example one held by an older collector, is never moved: wait for it, or stop all Pi processes and remove it.
 
 ## When the folder is full
 
@@ -66,7 +66,7 @@ Each Pi process writes a small status file per session, plus `copilot-session-cr
 
 - It removes a status file once its process provably exited (as for receipts), together with its identity record.
 - It removes `.ready-*` temporary files and empty session folders that have not changed for 10 minutes.
-- It handles at most 256 session folders and 1024 files per run. It starts at a random folder, so every folder is reached over time.
+- It handles at most 256 session folders and 1024 files per run, and at most 64 status or temporary files per folder. Other names are skipped without being touched. It starts at a random folder and a random file within each folder, so everything is reached over time.
 
 Status files written by v0.3.4 and earlier have no identity record. They stay, and BB ignores them once their process is dead. To clear them, stop all Pi processes and move the status root to a fresh private sibling:
 

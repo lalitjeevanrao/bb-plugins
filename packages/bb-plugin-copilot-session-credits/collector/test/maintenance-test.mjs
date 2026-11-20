@@ -45,7 +45,7 @@ function harness(directory, options = {}) {
   const invoke = () => { calls++; return { result: () => Promise.resolve({ stopReason: 'stop' }) }; };
   createProbe({ directory, autoStart: true, provider: { id: 'github-copilot', stream: invoke, streamSimple: invoke }, exited, writerIdentity: () => self, ...options })({ on: (name, run) => hooks.set(name, run), registerCommand: (name, value) => commands.set(name, value), registerProvider: value => { wrapped = value; } });
   hooks.get('session_start')({ reason: 'startup' }, context);
-  return { call: () => wrapped.streamSimple(model, {}, {}).result(), calls: () => calls, agentEnd: () => hooks.get('agent_end')({}, context) };
+  return { call: () => wrapped.streamSimple(model, {}, {}).result(), calls: () => calls, agentEnd: () => hooks.get('agent_end')({}, context), newSession: id => hooks.get('session_start')({ reason: 'new' }, { ...context, sessionManager: { ...context.sessionManager, getSessionId: () => id } }) };
 }
 const fresh = directory => fs.readdirSync(directory).filter(name => name.endsWith('.jsonl')).map(name => fs.readFileSync(join(directory, name), 'utf8').split('\n')[0]).filter(line => !line.includes('2026-11-01T00:00:00.000Z')).map(line => JSON.parse(line));
 
@@ -190,7 +190,7 @@ try {
     const first = createReadiness(many, '1.5.2', { exited, writerIdentity: () => self, now: () => clock, random: () => offset });
     first.start(sessionCtx('thr_ownfixture'));
     assert.equal(remaining(), 600 - 256, 'at most 256 folders per run');
-    first.maintain(); assert.equal(remaining(), 600 - 256, 'inside 10 minutes');
+    offset = 0.5; first.maintain(); assert.equal(remaining(), 600 - 256, 'inside 10 minutes nothing runs, even where work is left');
     clock += 11 * minutes; offset = 0.5; first.maintain(); assert(remaining() < 600 - 256, 'agent_end sweeps again later');
     for (const value of [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9]) { offset = value; const next = createReadiness(many, '1.5.2', { exited, writerIdentity: () => self, now: () => clock, random: () => offset }); next.start(sessionCtx('thr_ownfixture')); next.stop(); }
     assert.equal(remaining(), 0, 'restarts at other offsets reach every folder');
@@ -208,6 +208,73 @@ try {
     readiness.stop();
   });
 
+
+  await check('large ineligible receipts never starve later candidates (cheap head check, then remembered validations)', async () => {
+    const big = 'x'.repeat(220_000), pad = text => text.replace('"kind":"call_started"', `"kind":"call_started","pad":"${big}"`).replace('"kind":"observation"', `"kind":"observation","pad":"${big}"`);
+    // Rows near the end stay small, as the collector writes them, so the 4 KiB tail window decides.
+    // Old checkpoint-only receipts without a writer: rejected from 8 KiB each, without a full read.
+    const first = privateDir(join(root, 'starve-head'));
+    const leftovers = Array.from({ length: 40 }, () => receipt(first, { tail: 'capture_checkpoint', ageMs: 30 * 24 * 60 * minutes, edit: pad }));
+    const closed = Array.from({ length: 216 }, () => receipt(first));
+    assert(leftovers.every(file => fs.statSync(file.path).size > 400_000)); // 40 of them: more than one sweep's 16 MiB
+    await harness(first).call();
+    assert.equal(closed.filter(file => !fs.existsSync(file.path)).length, 64); assert(leftovers.every(file => fs.existsSync(file.path)));
+    assert.equal(fresh(first).length, 1);
+    // Old malformed closed receipts need a full read each; the next sweep reuses those validations.
+    const second = privateDir(join(root, 'starve-memo'));
+    const malformed = Array.from({ length: 40 }, () => receipt(second, { ageMs: 30 * 24 * 60 * minutes, edit: text => pad(text).replace('"seq":2', '"seq":9') }));
+    const good = Array.from({ length: 216 }, () => receipt(second));
+    let clock = Date.now();
+    const h = harness(second, { now: () => clock });
+    await h.call();
+    const firstPass = good.filter(file => !fs.existsSync(file.path)).length;
+    assert.equal(firstPass, 0, 'the first sweep spends its budget on the malformed receipts');
+    clock += 61_000; h.newSession('cccccccc-cccc-4ccc-8ccc-cccccccccccc'); await h.call();
+    assert.equal(good.filter(file => !fs.existsSync(file.path)).length, 64, 'the next sweep reuses those validations and reaches the rest');
+    assert(fs.readdirSync(second).length <= 193); assert(malformed.every(file => fs.existsSync(file.path)));
+  });
+
+  await check('a lock release that fails once is finished by the same process on its next attempt', async () => {
+    const { syncBuiltinESMExports } = await import('node:module');
+    for (const target of ['owner.json', '.capture-lock']) {
+      const directory = privateDir(join(root, 'release-' + target.replace('.', ''))), h = harness(directory);
+      const unlink = fs.unlinkSync, rmdir = fs.rmdirSync;
+      let failed = false;
+      const fault = (original, match) => (path, ...rest) => { if (!failed && String(path).endsWith(match)) { failed = true; const error = new Error('injected'); error.code = 'EIO'; throw error; } return original(path, ...rest); };
+      if (target === 'owner.json') fs.unlinkSync = fault(unlink, 'owner.json'); else fs.rmdirSync = fault(rmdir, '.capture-lock');
+      syncBuiltinESMExports();
+      try { await h.call(); } finally { fs.unlinkSync = unlink; fs.rmdirSync = rmdir; syncBuiltinESMExports(); }
+      assert(failed, target);
+      // The first release retries once at once; a fault that persists past both leaves the lock for the next attempt.
+      h.newSession('dddddddd-dddd-4ddd-8ddd-dddddddddddd'); await h.call();
+      assert(!fs.existsSync(join(directory, '.capture-lock')), target + ': lock released');
+      assert.equal(fresh(directory).length, 2, target + ': the next capture allocates');
+    }
+    // A fault on both immediate tries: the lock stays until this process's next attempt finishes it.
+    const directory = privateDir(join(root, 'release-twice')), h = harness(directory), rmdir = fs.rmdirSync;
+    let faults = 0;
+    fs.rmdirSync = (path, ...rest) => { if (String(path).endsWith('.capture-lock') && faults < 2) { faults++; const error = new Error('injected'); error.code = 'EIO'; throw error; } return rmdir(path, ...rest); };
+    syncBuiltinESMExports();
+    try { await h.call(); } finally { fs.rmdirSync = rmdir; syncBuiltinESMExports(); }
+    assert(fs.existsSync(join(directory, '.capture-lock')), 'left behind after two faults');
+    const other = harness(directory); await other.call();
+    assert(fs.existsSync(join(directory, '.capture-lock')), 'another live process never takes it');
+    h.newSession('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'); await h.call();
+    assert(!fs.existsSync(join(directory, '.capture-lock'))); assert.equal(fresh(directory).length, 2);
+  });
+
+  await check('status sweep reaches a dead marker behind many foreign entries in one folder', () => {
+    const dir = join(root, 'status-crowded'), session = 'pi_34343434-3434-4343-8343-343434343434', folder = privateDir(join(dir, session));
+    for (let n = 0; n < 1024; n++) fs.writeFileSync(join(folder, 'aaa-foreign-' + n), '');
+    privateDir(join(dir, '.instances'));
+    const instance = randomUUID(), path = join(folder, instance + '.json');
+    fs.writeFileSync(path, JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
+    fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 });
+    const readiness = createReadiness(dir, '1.5.2', { exited, writerIdentity: () => self, random: () => 0 });
+    readiness.start(sessionCtx('pi_00000000-0000-4000-8000-000000000000'));
+    assert(!fs.existsSync(path)); assert.equal(fs.readdirSync(folder).length, 1024, 'foreign entries untouched');
+    readiness.stop();
+  });
   console.log(JSON.stringify(results, null, 2));
   if (results.some(row => row.status === 'failed')) process.exitCode = 1;
 } finally { fs.rmSync(root, { recursive: true, force: true }); }

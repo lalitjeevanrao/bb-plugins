@@ -75,26 +75,44 @@ function breakAbandonedLock(directory, root, exited) {
   return true;
 }
 // Runs `work` under the shared `.capture-lock`. Returns 'busy' when a live (or unprovable) holder has it.
-function withLock(directory, root, { instance, exited, identity }, work) {
-  const lock = join(directory, '.capture-lock'), writer = identity(); // Probe identity before holding the lock.
+// `state.unreleased` remembers a lock this process failed to release (an I/O error on unlink or rmdir); the next
+// attempt finishes that release first, after checking it is still the same lock directory and owner file.
+function withLock(directory, root, state, work) {
+  const { instance, exited, identity } = state;
+  const lock = join(directory, '.capture-lock'), ownerFile = join(lock, LOCK_OWNER), writer = identity(); // Probe identity before holding the lock.
   const acquire = () => { try { mkdirSync(lock, { mode: 0o700 }); return true; } catch (error) { if (error.code === 'EEXIST') return false; throw error; } };
+  const release = held => {
+    try {
+      if (held.ownerIno !== undefined) {
+        try { const owner = lstatSync(ownerFile); if (owner.isFile() && owner.ino === held.ownerIno) unlinkSync(ownerFile); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+      }
+      rmdirSync(lock);
+      return true;
+    } catch { return false; }
+  };
+  const finishUnreleased = () => {
+    const held = state.unreleased;
+    if (!held) return false;
+    try { if (lstatSync(lock).ino !== held.lockIno) { state.unreleased = undefined; return false; } } catch { state.unreleased = undefined; return false; }
+    if (!release(held)) return false;
+    state.unreleased = undefined;
+    return true;
+  };
   // ponytail: skip contended calls, retry next call; never steal a lock by age.
   if (!acquire()) {
-    try { if (!breakAbandonedLock(directory, root, exited) || !acquire()) return 'busy'; } catch { return 'busy'; }
+    try { if (!(finishUnreleased() || breakAbandonedLock(directory, root, exited)) || !acquire()) return 'busy'; } catch { return 'busy'; }
   }
-  const ownerFile = join(lock, LOCK_OWNER);
-  let owned = false;
+  const held = { lockIno: undefined, ownerIno: undefined };
+  try { held.lockIno = lstatSync(lock).ino; } catch {}
   if (writer) {
     try {
       const fd = openSync(ownerFile, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-      try { writeSync(fd, JSON.stringify({ schema: 1, instance, writer })); owned = true; } finally { closeSync(fd); }
+      try { held.ownerIno = fstatSync(fd).ino; writeSync(fd, JSON.stringify({ schema: 1, instance, writer })); } finally { closeSync(fd); }
     } catch {}
   }
   try { return work(); }
-  finally {
-    try { if (owned && readLockOwner(lock)?.instance === instance) unlinkSync(ownerFile); } catch {}
-    try { rmdirSync(lock); } catch {}
-  }
+  finally { if (!release(held) && !release(held)) state.unreleased = held; }
 }
 // All schema-3 writers reserve files under the same atomic mkdir lock. Maintenance moves closed receipts
 // under that lock before the cap check; no evidence is deleted. Returns an fd, 'busy' or 'full'.
@@ -135,6 +153,7 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
   directory = resolve(directory);
   const { archiveTo, archiveAt } = archiveLimits(maxFiles);
   const lock = { instance: randomUUID(), exited, identity: writerIdentity };
+  const proofs = new Map(); // Receipt validations, reused while a file is unchanged.
   return pi => {
     let enabled = autoStart, base, capture, failed = false, missedCalls = 0, lastMiss, sweepAfter = 0, periodicAfter = 0;
     // Under the lock: always finish interrupted moves; sweep closed receipts from `archiveAt` down to
@@ -145,7 +164,7 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
       if (!needsRepair && !sweep) return;
       if (sweep && periodic) periodicAfter = time + archiveIntervalMs;
       let result;
-      try { result = archiveClosedReceipts({ directory, root, target: archiveTo, sweep, now: time, exited }); }
+      try { result = archiveClosedReceipts({ directory, root, target: archiveTo, sweep, now: time, exited, memo: proofs }); }
       finally { if (sweep && !result?.moved) sweepAfter = time + archiveBackoffMs; }
     };
     // Periodic maintenance while enabled: an unlocked lstat scan each turn, the lock only when there is work.

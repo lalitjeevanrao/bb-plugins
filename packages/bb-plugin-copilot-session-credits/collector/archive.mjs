@@ -88,20 +88,40 @@ function proveReceipt(fd, size, name) {
   return shard && { shard, terminal, writer: first.writer };
 }
 
+// The first row, when the head window holds it whole; undefined when it does not (the full read decides).
+function headRow(fd, size) {
+  const text = readAt(fd, Math.min(TAIL, size), 0).toString('utf8'), end = text.indexOf('\n');
+  if (end < 0) return undefined;
+  try { return JSON.parse(text.slice(0, end)); } catch { return null; }
+}
+const proofKey = (name, stat) => [name, stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(':');
+
 // Opens a receipt by name and checks it is the inode `expected` describes. `links` is the accepted nlink.
 // Eligible: a closed receipt, or a leftover with no terminal row whose writer provably exited and that has not
-// changed for `quietMs`.
-function inspect(directory, name, expected, links, budget, leftover) {
+// changed for `quietMs`. Cheap reads come first: the tail, then (for a quiet leftover) the head row's writer.
+// Full validations are remembered in `context.memo` while the file is unchanged, so large ineligible
+// receipts cost their bytes once per process and never starve later candidates.
+function inspect(directory, name, expected, links, budget, context) {
   const fd = openSync(join(directory, name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(fd);
     if (!stat.isFile() || stat.dev !== expected.dev || stat.ino !== expected.ino || stat.nlink !== links || !owned(stat) || (stat.mode & 0o077) || stat.size < 1 || stat.size > MAX_FILE) return { shard: null, stat };
-    const tail = tailIsTerminal(fd, stat.size), quiet = leftover.now - stat.mtimeMs >= leftover.quietMs;
-    budget.bytes -= Math.min(TAIL, stat.size);
-    if (tail === false && !quiet) return { shard: null, stat };
-    budget.bytes -= stat.size;
-    const proof = proveReceipt(fd, stat.size, name);
-    if (!proof || (!proof.terminal && !(quiet && leftover.exited(proof.writer)))) return { shard: null, stat };
+    const quiet = context.now - stat.mtimeMs >= context.quietMs, key = proofKey(name, stat);
+    let proof = context.memo.get(key);
+    if (proof === undefined) {
+      const tail = tailIsTerminal(fd, stat.size);
+      budget.bytes -= Math.min(TAIL, stat.size);
+      if (tail === false) {
+        if (!quiet) return { shard: null, stat };
+        const head = headRow(fd, stat.size);
+        budget.bytes -= Math.min(TAIL, stat.size);
+        if (head === null || (head !== undefined && !context.exited(head.writer))) return { shard: null, stat };
+      }
+      budget.bytes -= stat.size;
+      proof = proveReceipt(fd, stat.size, name);
+      context.memo.set(key, proof);
+    }
+    if (!proof || (!proof.terminal && !(quiet && context.exited(proof.writer)))) return { shard: null, stat };
     return { shard: proof.shard, stat };
   } finally { closeSync(fd); }
 }
@@ -126,10 +146,13 @@ export function scanReceipts(directory) {
  * and has checked `directory` (its lstat is `root`). Bounded by `maxMoves` and `maxBytes` per run.
  * Returns counts; throws only on unexpected errors, which the caller ignores.
  */
-export function archiveClosedReceipts({ directory, root, target, sweep = true, maxMoves = 64, maxBytes = 16 * MAX_FILE, now = Date.now(), quietMs = QUIET_MS, exited = writer => writerExited(writer) }) {
-  const leftover = { now, quietMs, exited };
+export function archiveClosedReceipts({ directory, root, target, sweep = true, maxMoves = 64, maxBytes = 16 * MAX_FILE, now = Date.now(), quietMs = QUIET_MS, exited = writer => writerExited(writer), memo = new Map() }) {
+  const leftover = { now, quietMs, exited, memo };
   const result = { moved: 0, repaired: 0, collisions: 0, kept: 0 };
   const { count, receipts } = scanReceipts(directory);
+  // Forget validations of receipts that are gone or changed, so the memo stays bounded by the root.
+  const current = new Set(receipts.map(({ name, stat }) => proofKey(name, stat)));
+  for (const key of memo.keys()) if (!current.has(key)) memo.delete(key);
   let entries = count, archive, archiveStat;
   const budget = { bytes: maxBytes };
   const shardDirectory = shard => {

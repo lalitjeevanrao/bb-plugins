@@ -181,3 +181,13 @@ A writer is **dead** only when its identity has the same `machine` as this proce
 - Markers without an identity record (all pre-change markers) stay. The reader already ignores them when their process is dead.
 - Empty session directories and `.ready-*` temp files unchanged for 10 minutes are removed.
 - The sweep runs on `session_start` and `agent_end`, at most every 10 minutes per process. It starts at a random offset in the sorted directory list and wraps around, so restarts cover all directories over time without stored state. The bounds stay at 256 directories and 1024 files per run.
+
+### Gate-2 review changes (GPT-6.1-Sol, thread thr_dniu77xqj4)
+
+The review rejected ec408f6 for three reproduced stalls. All three are fixed, each with a regression test that fails without the fix.
+
+1. **Sweep starvation by large ineligible receipts.** A quiet leftover is now rejected from its head row's `writer` (4 KiB) before any full read. Full validations are remembered per process, keyed by name, dev, ino, size, mtime and ctime, and pruned to the files present in the root. A later sweep therefore reaches the remaining candidates.
+2. **Failed lock release.** The holder records the inode of the lock directory and of its own `owner.json`, and retries the release once at once. If both tries fail, it remembers the lock and finishes the release on its next attempt, after checking the lock directory still has the same inode. A half-written `owner.json` is removed by inode as well.
+3. **Status starvation inside a folder.** The folder listing is bounded to 4096 names. Only marker and temp names are candidates, at most 64 per folder per run, starting at a random candidate.
+
+The surviving mutant "status timer ignored" is now caught: the test changes the start offset inside the 10-minute window.
