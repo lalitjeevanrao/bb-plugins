@@ -98,7 +98,7 @@ for (const [name, check] of [
   }],
   ['Collector full and damaged capture explain the gap and next action without prune', () => {
     reset({usage:{captureIssue:true,issues:['collector-full']}});let html=render('panel');
-    assert.match(html,/Collector full/);assert.match(html,/New captures blocked/);assert.match(html,/Stop all Pi/);assert.doesNotMatch(html,/prune/);
+    assert.match(html,/Collector full/);assert.match(html,/New captures blocked/);assert.match(html,/next Copilot call/);assert.match(html,/Missed calls stay uncounted/);assert.doesNotMatch(html,/Stop all Pi|prune|recovered/);
     reset({usage:{captureIssue:true,issues:['capture-damaged','collector-full']}});html=render('panel');
     assert.match(html,/data-tone="bad"/);assert.match(html,/could not be read safely/);assert.match(html,/New captures blocked/);
   }],

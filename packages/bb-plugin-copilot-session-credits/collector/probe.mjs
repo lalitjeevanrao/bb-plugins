@@ -1,6 +1,7 @@
 import { constants, mkdirSync, rmdirSync, unlinkSync, lstatSync, realpathSync, fstatSync, readdirSync, openSync, writeSync, closeSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
+import { archiveClosedReceipts, archiveLimits, scanReceipts } from './archive.mjs';
 
 const APIS = new Set(['openai-responses', 'openai-completions', 'anthropic-messages']);
 const TYPES = new Set(['response.created', 'response.completed', 'response.incomplete', 'response.failed', 'error', 'chat.completion.chunk', 'message_start', 'message_delta', 'message_stop', 'copilot_usage']);
@@ -38,18 +39,33 @@ function chatBillingPhase(data) {
   if (choice.finish_reason == null) return 'interim';
   return ['stop', 'length', 'tool_calls', 'function_call'].includes(choice.finish_reason) ? 'final' : 'unknown';
 }
-// All schema-3 writers reserve files under the same atomic mkdir lock. No evidence is deleted.
-function openCapture(directory, epoch, maxFiles) {
+function checkRoot(directory) {
   if (realpathSync(dirname(directory)) !== dirname(directory)) throw new Error('Canonical parent required');
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
   const dir = lstatSync(directory);
   if (realpathSync(directory) !== directory || !dir.isDirectory() || dir.isSymbolicLink() || (dir.mode & 0o077) !== 0 || (process.getuid && dir.uid !== process.getuid())) throw new Error('Private directory required');
-  const lock = join(directory, '.capture-lock'), file = join(directory, `${epoch}.jsonl`);
-  let locked = false, fd, fileStat;
+  return dir;
+}
+// Runs `work` under the shared `.capture-lock`. Returns 'busy' when another holder has it; never steals it.
+function withLock(directory, work) {
+  const lock = join(directory, '.capture-lock');
+  // ponytail: skip contended calls, retry next call; never steal a crash-left lock.
+  try { mkdirSync(lock, { mode: 0o700 }); } catch (error) { if (error.code === 'EEXIST') return 'busy'; throw error; }
+  try { return work(); } finally { try { rmdirSync(lock); } catch {} }
+}
+// All schema-3 writers reserve files under the same atomic mkdir lock. Maintenance moves closed receipts
+// under that lock before the cap check; no evidence is deleted. Returns an fd, 'busy' or 'full'.
+function openCapture(directory, epoch, maxFiles, maintain = () => {}) {
+  if (realpathSync(dirname(directory)) !== dirname(directory)) throw new Error('Canonical parent required');
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const dir = checkRoot(directory);
+  return withLock(directory, () => allocate(directory, dir, epoch, maxFiles, maintain));
+}
+function allocate(directory, dir, epoch, maxFiles, maintain) {
+  const file = join(directory, `${epoch}.jsonl`);
+  let fd, fileStat;
   try {
-    // ponytail: skip contended calls, retry next call; never steal a crash-left lock.
-    try { mkdirSync(lock, { mode: 0o700 }); } catch (error) { if (error.code === 'EEXIST') return undefined; throw error; } locked = true;
-    if (readdirSync(directory).filter(name => name !== '.capture-lock').length >= maxFiles) throw new Error('Capture directory full');
+    try { maintain(dir); } catch {} // Maintenance never blocks or fails a capture.
+    if (readdirSync(directory).filter(name => name !== '.capture-lock').length >= maxFiles) return 'full';
     fd = openSync(file, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     fileStat = fstatSync(fd);
     const after = lstatSync(directory);
@@ -66,15 +82,36 @@ function openCapture(directory, epoch, maxFiles) {
       try { closeSync(fd); } catch {}
     }
     throw error;
-  } finally { if (locked) { try { rmdirSync(lock); } catch {} } }
+  }
 }
 
-export function createProbe({ directory, provider, autoStart = false, maxBytes = 1_048_576, maxRecords = 10_000, maxFiles = 256, onStatus = () => {} }) {
+export function createProbe({ directory, provider, autoStart = false, maxBytes = 1_048_576, maxRecords = 10_000, maxFiles = 256, onStatus = () => {}, now = Date.now, archiveIntervalMs = 600_000, archiveBackoffMs = 60_000 }) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 512 || !Number.isSafeInteger(maxRecords) || maxRecords < 1 || !Number.isSafeInteger(maxFiles) || maxFiles < 1 || maxFiles > 256) throw new Error('Invalid capture limits');
   if (provider?.id !== 'github-copilot' || typeof provider.stream !== 'function' || typeof provider.streamSimple !== 'function') throw new Error('Native Copilot provider required');
   directory = resolve(directory);
+  const { archiveTo, archiveAt } = archiveLimits(maxFiles);
   return pi => {
-    let enabled = autoStart, base, capture, failed = false, missedCalls = 0;
+    let enabled = autoStart, base, capture, failed = false, missedCalls = 0, lastMiss, sweepAfter = 0, periodicAfter = 0;
+    // Under the lock: always finish interrupted moves; sweep closed receipts from `archiveAt` down to
+    // `archiveTo`, backing off after a sweep that moved nothing. Errors are ignored by the callers.
+    const maintain = (root, periodic = false) => {
+      const { count, needsRepair } = scanReceipts(directory), time = now();
+      const sweep = count >= archiveAt && time >= sweepAfter && (!periodic || time >= periodicAfter);
+      if (!needsRepair && !sweep) return;
+      if (sweep && periodic) periodicAfter = time + archiveIntervalMs;
+      let result;
+      try { result = archiveClosedReceipts({ directory, root, target: archiveTo, sweep }); }
+      finally { if (sweep && !result?.moved) sweepAfter = time + archiveBackoffMs; }
+    };
+    // Periodic maintenance while enabled: an unlocked lstat scan each turn, the lock only when there is work.
+    const periodic = () => {
+      if (!enabled || failed) return;
+      let root;
+      try { root = checkRoot(directory); } catch { return; } // Never create the root here.
+      const { count, needsRepair } = scanReceipts(directory), time = now();
+      if (!needsRepair && !(count >= archiveAt && time >= sweepAfter && time >= periodicAfter)) return;
+      withLock(directory, () => maintain(root, true));
+    };
     const status = () => { try { onStatus(!enabled ? 'disabled' : failed ? 'error' : 'ready'); } catch {} };
     const fail = () => { failed = true; status(); };
     const guard = run => (event, ctx) => { try { run(event, ctx); } catch { fail(); } };
@@ -94,8 +131,10 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
       if (capture) return capture;
       const epoch = randomUUID(), identity = { epoch, nativeSessionHash: base.nativeSessionHash, providerSession: base.providerSession };
       let fd;
-      try { fd = openCapture(directory, epoch, maxFiles); } catch { fail(); return undefined; }
-      if (fd === undefined) { missedCalls++; return undefined; }
+      try { fd = openCapture(directory, epoch, maxFiles, root => maintain(root)); } catch { fail(); return undefined; }
+      // Busy or full: the provider call still runs without a receipt; the next call retries.
+      if (fd === 'busy' || fd === 'full') { missedCalls++; lastMiss = fd; return undefined; }
+      lastMiss = undefined;
       let bytes = 0, records = 0, dropped = 0, rawEvents = 0, amountObservations = 0, truncated = false, inFlight = 0;
       const close = () => { if (fd !== undefined) { try { closeSync(fd); } catch {} fd = undefined; } };
       const write = (kind, fields = {}) => {
@@ -163,7 +202,10 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
     pi.registerProvider({ ...provider, stream: wrap('stream'), streamSimple: wrap('streamSimple') });
     // No provider_stream_event collector: it would duplicate the wrapper's observations.
     pi.on('session_start', guard((event, ctx) => { setSession(event, ctx); status(); }));
-    pi.on('agent_end', guard(() => { if (capture) capture.write('capture_checkpoint', capture.counts()); }));
+    pi.on('agent_end', guard(() => {
+      if (capture) capture.write('capture_checkpoint', capture.counts());
+      try { periodic(); } catch {} // Maintenance never fails capture.
+    }));
     pi.on('session_shutdown', guard(event => { stop(REASONS.has(event.reason) ? event.reason : 'unknown'); base = undefined; }));
     pi.registerCommand('copilot-probe', {
       description: 'Local credit probe: on, off, status (never invokes model)',
@@ -175,7 +217,7 @@ export function createProbe({ directory, provider, autoStart = false, maxBytes =
         status();
         if (capture) capture.write('capture_status', capture.counts());
         const counts = capture?.counts(), contended = enabled && !capture && missedCalls > 0;
-        ctx.ui.notify(`Copilot probe: ${enabled ? failed ? 'capture-error' : contended ? 'capture-contended' : 'on' : 'off'}; observations=${counts?.amountObservations ?? 0}; missedCalls=${missedCalls}; dropped=${counts?.dropped ?? 0}; coverage=partial`, failed || contended ? 'warning' : 'info');
+        ctx.ui.notify(`Copilot probe: ${enabled ? failed ? 'capture-error' : contended ? lastMiss === 'full' ? 'collector-full' : 'capture-contended' : 'on' : 'off'}; observations=${counts?.amountObservations ?? 0}; missedCalls=${missedCalls}; dropped=${counts?.dropped ?? 0}; coverage=partial`, failed || contended ? 'warning' : 'info');
       }
     });
   };

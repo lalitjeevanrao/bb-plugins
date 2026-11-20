@@ -11,8 +11,8 @@ export function creditDetails(usage, { stale = false, provider, sessionId } = {}
   if (issues.has('capture-damaged')) { label = 'Missing data'; tone = 'bad'; notes.push('Some receipts could not be read safely.'); action = 'Check /copilot-probe status, then stop Pi before inspecting files and permissions.'; }
   if (issues.has('collector-full')) {
     if (tone !== 'bad') { label = 'Collector full'; tone = 'warn'; }
-    notes.push('New captures blocked. The receipt folder is full.');
-    action = 'Stop all Pi processes. Move receipts to a private archive outside the capture folder.';
+    notes.push('New captures blocked. The receipt folder is full. Missed calls stay uncounted.');
+    action = 'Pi moves closed receipts to its private archive on the next Copilot call. If this persists, see the cleanup docs.';
   }
   if (issues.has('stale-lock')) { notes.push('Capture lock may be abandoned.'); action = 'Do not remove the lock while Pi runs. Stop Pi; see cleanup docs.'; }
   if (issues.has('allocation-busy')) { notes.push('Capture allocation is busy.'); action ??= 'Wait a moment. Check /copilot-probe status if it persists.'; }

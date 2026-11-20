@@ -7,6 +7,13 @@
 - Composer Auto-collapse: focus-out and idle collapse that keeps drafts.
 - Credits keep their unprefixed tags; the new plugins use `home-hero/` and `composer-autocollapse/` tag prefixes.
 
+## Unreleased — copilot-session-credits
+
+- Pi collector archives closed receipts automatically. From 224 entries it moves the oldest receipts that end in `capture_stopped` or `capture_truncated` into `~/.pi/agent/copilot-session-credits-archive/<session>/`, down to 192. The move is a hard link then unlink under `.capture-lock`. It never overwrites or deletes, and it never touches live, checkpoint-only or malformed receipts.
+- A full receipt folder no longer turns capture off for the session. Copilot calls still run, `/copilot-probe status` shows `collector-full`, and capture resumes on the next call once a slot is free. Missed calls stay marked as missing.
+- BB reads the archive shards of the thread's sessions, so totals survive archiving and each receipt counts once.
+- Update both the BB plugin and the Pi companion; an older BB plugin does not read the archive.
+
 ## [0.3.4] — 2026-11-16
 
 - Keep Pi credits after editing or rewinding a message. BB forks the Pi session from `pi_<uuid>` to `thr_<thread id>`; the collector, readiness marker, contract and host now accept both names.

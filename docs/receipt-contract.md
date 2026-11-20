@@ -7,7 +7,9 @@ The Pi extension writes these files; the BB plugin host reader consumes them. Th
 - Directory: `~/.pi/agent/copilot-session-credits/` (owner-only `0700`, canonical path, owned by the reading user).
 - One file per capture: `<epoch-uuid>.jsonl`, mode `0600`, regular single-link file, opened without following symlinks.
 - Allocation lock: `.capture-lock/` (a directory created atomically).
-- Cap: 256 entries (64 before `0.2.0`); new captures are refused when full. There is no prune command; use [stopped-Pi archival](cleanup.md). Per file: 1 MiB, 10,000 records, with an explicit `capture_truncated` row.
+- Cap: 256 entries (64 before `0.2.0`). A full folder refuses new captures but never blocks the Copilot call; the next call retries. Per file: 1 MiB, 10,000 records, with an explicit `capture_truncated` row.
+- Archive: from 224 entries the collector moves closed receipts, oldest first, to `~/.pi/agent/copilot-session-credits-archive/<shard>/<epoch>.jsonl` (`0700` directories, same inode and mode), down to 192. `<shard>` is `providerSession`, or `h_<nativeSessionHash>` when it is `null`. Moves happen under `.capture-lock`, with link then unlink, never replacing a file. Nothing is deleted. See [cleanup](cleanup.md).
+- Closed: the file ends in `\n`, every row is valid with contiguous `seq` and one identity, the first row is `capture_started` for the file's epoch, and the last row (only) is `capture_stopped` or `capture_truncated`. A writer never appends after either row.
 
 ## Records
 
@@ -35,7 +37,7 @@ Kinds: `capture_started`, `call_started`, `observation`, `call_finished`, `captu
 
 ## What the reader enforces
 
-First row must be `capture_started` with `schema 3`, matching `providerSession`, `epoch + ".jsonl" == file name`, and a 64-hex `nativeSessionHash`. Every later row must repeat the same identity and `seq == index + 1`. More than one distinct `nativeSessionHash` for one provider session → refused as ambiguous. A truncated capture, `dropped > 0`, `missedCalls > 0` or a stop with `inFlight > 0` marks the result as having a capture issue (*Missing data*). Reader budget: 8 MiB of matching records, 1 MiB per file, 256 KiB per line.
+First row must be `capture_started` with `schema 3`, matching `providerSession`, `epoch + ".jsonl" == file name`, and a 64-hex `nativeSessionHash`. Every later row must repeat the same identity and `seq == index + 1`. More than one distinct `nativeSessionHash` for one provider session → refused as ambiguous. A truncated capture, `dropped > 0`, `missedCalls > 0` or a stop with `inFlight > 0` marks the result as having a capture issue (*Missing data*). Reader order: capture folder, then the archive shards of the requested sessions (and `h_<hash>` shards recovered from bridge headers), then the legacy folder; each `<epoch>.jsonl` name counts once. A file that disappears from the capture folder is looked up in its shard. Reader budget: 8 MiB of matching records, 1 MiB per file, 256 KiB per line, 1024 entries per shard.
 
 ## Copilot CLI (read only, not written by us)
 

@@ -13,7 +13,7 @@ Include the version, OS, expected behaviour and a minimal synthetic reproduction
 - Native CLI logs use their provider's modes. The reader bounds reads, checks ownership/links and returns usage fields only. Raw log-tail bytes may contain transcript content in local memory.
 - Scalar usage and session identity travel over BB's existing connection. No transcript is returned by the reader; there is no separate analytics endpoint.
 - Same-user processes can alter local telemetry. This is not tamper-proof or invoice-reconciled evidence.
-- No package command deletes receipts. Manual archival requires all Pi processes stopped; keep archives private.
+- Nothing deletes receipts. The collector moves closed receipts into a private sibling archive with the same checks (owned, canonical, `0700`/`0600`, no symlinks, same device), never replacing a file. Manual moves require all Pi processes stopped; keep archives private.
 
 Pi startup-readiness records live separately under `~/.pi/agent/copilot-session-credits-status/`, grouped by provider session and uniquely named per instance. They use the same ownership, private-mode and symlink checks as receipts, with bounded reads. Process liveness is best-effort: readiness is not a heartbeat or protection against same-user tampering/PID reuse. Each instance removes only its own status file on normal shutdown. Crash leftovers do not count when their processes are no longer alive.
 
