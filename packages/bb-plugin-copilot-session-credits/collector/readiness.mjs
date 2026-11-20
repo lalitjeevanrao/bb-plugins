@@ -32,12 +32,30 @@ function readPrivateJson(path) {
     return { value: JSON.parse(buffer.subarray(0, offset).toString()), stat };
   } finally { closeSync(fd); }
 }
-// `.instances/<instance>.json` holds the writer identity that lets a sweep prove a marker's process exited.
+// `.instances/<instance>.json` holds the writer identity that lets a sweep prove a marker's process exited, and
+// the session whose marker it backs, so an orphaned record (crash before the marker) can be found and removed.
 function readInstance(directory, instance) {
-  const { value } = readPrivateJson(join(directory, INSTANCES, instance + '.json'));
-  if (value?.schema !== 1 || value.instance !== instance || !validIdentity(value.writer) || Object.keys(value).sort().join(',') !== 'instance,schema,writer') throw Error('Invalid instance record');
-  return value;
+  const { value, stat } = readPrivateJson(join(directory, INSTANCES, instance + '.json'));
+  if (value?.schema !== 1 || value.instance !== instance || !SESSION.test(value.providerSession ?? '') || !validIdentity(value.writer) || Object.keys(value).sort().join(',') !== 'instance,providerSession,schema,writer') throw Error('Invalid instance record');
+  return { ...value, stat };
 }
+// A uniform random sample (reservoir) of at most `limit` names in `folder` that `accept` takes; other names cost
+// one directory read each and nothing else, so no position in the folder can starve.
+function sampleNames(folder, accept, limit, random) {
+  const names = [], dir = opendirSync(folder);
+  let candidates = 0;
+  try {
+    let entry, scanned = 0;
+    while (scanned++ < FOLDER_SCAN && (entry = dir.readSync())) {
+      if (!accept(entry.name)) continue;
+      candidates++;
+      if (names.length < limit) names.push(entry.name);
+      else { const slot = Math.floor(random() * candidates); if (slot < limit) names[slot] = entry.name; }
+    }
+  } finally { dir.closeSync(); }
+  return names;
+}
+const isMarker = name => name.endsWith('.json') && UUID.test(name.slice(0, -5));
 function readMarker(path, providerSession) {
   const { value, stat } = readPrivateJson(path);
   if (value.schema !== 1 || value.providerSession !== providerSession || !SESSION.test(value.providerSession) || !Number.isSafeInteger(value.pid) || value.pid < 1 || value.pid > 2147483647 || typeof value.instance !== 'string' || !UUID.test(value.instance) || basename(path) !== value.instance + '.json' || typeof value.runtimeVersion !== 'string' || !/^[0-9][0-9A-Za-z.+-]{0,63}$/.test(value.runtimeVersion) || !STATES.has(value.state) || Object.keys(value).sort().join(',') !== 'instance,pid,providerSession,runtimeVersion,schema,state') throw Error('Invalid readiness record');
@@ -96,9 +114,9 @@ export function createReadiness(directory, runtimeVersion, { now = Date.now, ran
     const writer = writerIdentity();
     if (!writer) return;
     ensureDirectory(join(directory, INSTANCES));
-    try { readInstance(directory, instance); return; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    try { if (readInstance(directory, instance).providerSession === providerSession) return; } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const temp = join(directory, INSTANCES, `.ready-${instance}-${randomUUID()}`);
-    try { writeFileSync(temp, JSON.stringify({ schema: 1, instance, writer }), { flag: 'wx', mode: 0o600 }); renameSync(temp, instancePath); }
+    try { writeFileSync(temp, JSON.stringify({ schema: 1, instance, providerSession, writer }), { flag: 'wx', mode: 0o600 }); renameSync(temp, instancePath); }
     finally { try { unlinkSync(temp); } catch {} }
   };
   const write = () => {
@@ -138,25 +156,12 @@ export function createReadiness(directory, runtimeVersion, { now = Date.now, ran
       try {
         const folderStat = lstatSync(folder);
         safeDirectory(folder);
-        // Only marker and temp names are candidates; foreign names cost one directory read each and nothing else.
-        // A uniform random sample (reservoir) of at most 64 candidates means no position in the folder can starve.
-        const names = [], dir = opendirSync(folder);
-        let candidates = 0;
-        try {
-          let entry, scanned = 0;
-          while (scanned++ < FOLDER_SCAN && (entry = dir.readSync())) {
-            const name = entry.name;
-            if (!((name.endsWith('.json') && UUID.test(name.slice(0, -5))) || name.startsWith('.ready-'))) continue;
-            candidates++;
-            if (names.length < FOLDER_FILES) names.push(name);
-            else { const slot = Math.floor(random() * candidates); if (slot < FOLDER_FILES) names[slot] = name; }
-          }
-        } finally { dir.closeSync(); }
+        const names = sampleNames(folder, name => isMarker(name) || name.startsWith('.ready-'), FOLDER_FILES, random);
         for (const name of names) {
           if (++files > SWEEP_FILES) break;
           const file = join(folder, name);
           try {
-            if (name.endsWith('.json') && UUID.test(name.slice(0, -5)) && name !== instance + '.json') {
+            if (isMarker(name) && name !== instance + '.json') {
               const { value, stat } = readMarker(file, session);
               const record = readInstance(directory, value.instance);
               if (record.writer.pid !== value.pid || !exited(record.writer)) continue;
@@ -172,6 +177,27 @@ export function createReadiness(directory, runtimeVersion, { now = Date.now, ran
         }
         if (time - folderStat.mtimeMs >= QUIET_MS && readdirSync(folder).length === 0) rmdirSync(folder);
       } catch {}
+    }
+    // Identity records whose marker is gone (a crash between the two writes) and old temp files in `.instances`.
+    // A record still backing a marker stays: the marker pass above needs it as proof.
+    const records = join(directory, INSTANCES);
+    let names = [];
+    try { safeDirectory(records); names = sampleNames(records, name => isMarker(name) || name.startsWith('.ready-'), FOLDER_FILES, random); } catch {}
+    for (const name of names) {
+      if (++files > SWEEP_FILES) break;
+      const file = join(records, name);
+      try {
+        if (isMarker(name) && name !== instance + '.json') {
+          const record = readInstance(directory, name.slice(0, -5));
+          try { lstatSync(join(directory, record.providerSession, name)); continue; } catch (error) { if (error.code !== 'ENOENT') continue; }
+          if (!exited(record.writer)) continue;
+          const current = lstatSync(file);
+          if (current.dev === record.stat.dev && current.ino === record.stat.ino) unlinkSync(file);
+        } else if (name.startsWith('.ready-')) {
+          const stat = lstatSync(file);
+          if (stat.isFile() && !stat.isSymbolicLink() && owned(stat) && time - stat.mtimeMs >= QUIET_MS) unlinkSync(file);
+        }
+      } catch {} // Invalid, unsafe or ambiguous records stay.
     }
   };
   return {

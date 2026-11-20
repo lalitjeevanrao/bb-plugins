@@ -149,7 +149,7 @@ try {
   const status = join(root, 'status'), marker = (session, instance, pid, owner) => {
     const folder = privateDir(join(status, session)); privateDir(join(status, '.instances'));
     fs.writeFileSync(join(folder, instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
-    if (owner) fs.writeFileSync(join(status, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: owner }), { mode: 0o600 });
+    if (owner) fs.writeFileSync(join(status, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: owner }), { mode: 0o600 });
     return join(folder, instance + '.json');
   };
   const old = path => { const time = new Date(Date.now() - 60 * minutes); fs.utimesSync(path, time, time); };
@@ -184,7 +184,7 @@ try {
 
   await check('status sweep is bounded, runs at most every 10 minutes, and reaches every folder across restarts', () => {
     const many = join(root, 'status-many'), ids = Array.from({ length: 600 }, (_, n) => 'thr_fixture' + String(n).padStart(4, '0'));
-    const markers = ids.map(session => { const folder = privateDir(join(many, session)), instance = randomUUID(); privateDir(join(many, '.instances')); fs.writeFileSync(join(folder, instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 }); fs.writeFileSync(join(many, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 }); return join(folder, instance + '.json'); });
+    const markers = ids.map(session => { const folder = privateDir(join(many, session)), instance = randomUUID(); privateDir(join(many, '.instances')); fs.writeFileSync(join(folder, instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 }); fs.writeFileSync(join(many, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(DEAD) }), { mode: 0o600 }); return join(folder, instance + '.json'); });
     const remaining = () => markers.filter(path => fs.existsSync(path)).length;
     let clock = Date.now(), offset = 0;
     const first = createReadiness(many, '1.5.2', { exited, writerIdentity: () => self, now: () => clock, random: () => offset });
@@ -269,7 +269,7 @@ try {
     privateDir(join(dir, '.instances'));
     const instance = randomUUID(), path = join(folder, instance + '.json');
     fs.writeFileSync(path, JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
-    fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 });
+    fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(DEAD) }), { mode: 0o600 });
     const readiness = createReadiness(dir, '1.5.2', { exited, writerIdentity: () => self, random: () => 0 });
     readiness.start(sessionCtx('pi_00000000-0000-4000-8000-000000000000'));
     assert(!fs.existsSync(path)); assert.equal(fs.readdirSync(folder).length, 1024, 'foreign entries untouched');
@@ -300,7 +300,7 @@ try {
     const markers = Array.from({ length: 200 }, () => {
       const instance = randomUUID(), path = join(folder, instance + '.json');
       fs.writeFileSync(path, JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
-      fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 });
+      fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(DEAD) }), { mode: 0o600 });
       return path;
     });
     let clock = Date.now(), seed = 7;
@@ -311,12 +311,35 @@ try {
     for (let run = 0; run < 3; run++) { clock += 11 * minutes; readiness.maintain(); }
     assert.equal(markers.filter(path => fs.existsSync(path)).length, 0); assert.equal(fs.readdirSync(folder).length, 6000);
     // 200 live markers stay forever; a fair sample still reaches the one dead marker among them.
-    const live = Array.from({ length: 200 }, () => { const instance = randomUUID(); fs.writeFileSync(join(folder, instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid: ALIVE, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 }); fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: writer(ALIVE) }), { mode: 0o600 }); return instance; });
+    const live = Array.from({ length: 200 }, () => { const instance = randomUUID(); fs.writeFileSync(join(folder, instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid: ALIVE, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 }); fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(ALIVE) }), { mode: 0o600 }); return instance; });
     const instance = randomUUID(), dead = join(folder, instance + '.json');
     fs.writeFileSync(dead, JSON.stringify({ schema: 1, providerSession: session, pid: DEAD, instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
-    fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 });
+    fs.writeFileSync(join(dir, '.instances', instance + '.json'), JSON.stringify({ schema: 1, instance, providerSession: session, writer: writer(DEAD) }), { mode: 0o600 });
     for (let run = 0; run < 40 && fs.existsSync(dead); run++) { clock += 11 * minutes; readiness.maintain(); }
     assert(!fs.existsSync(dead), 'reached behind persistent candidates'); assert.equal(live.filter(id => fs.existsSync(join(folder, id + '.json'))).length, 200);
+    readiness.stop();
+  });
+
+  await check('identity records left by a crash before their marker are removed once the writer exited; records still backing a marker stay', () => {
+    const dir = join(root, 'status-orphans'), records = privateDir(join(dir, '.instances'));
+    const session = 'pi_78787878-7878-4787-8787-787878787878';
+    const record = (owner, extra = {}) => { const instance = randomUUID(), path = join(records, instance + '.json'); fs.writeFileSync(path, JSON.stringify({ schema: 1, instance, providerSession: session, writer: owner, ...extra }), { mode: 0o600 }); return { instance, path }; };
+    const orphan = record(writer(DEAD));
+    const liveOrphan = record(writer(ALIVE));
+    const backing = record(writer(DEAD)); // Its marker exists but cannot be removed (pid differs), so the record must stay as proof.
+    fs.writeFileSync(join(privateDir(join(dir, session)), backing.instance + '.json'), JSON.stringify({ schema: 1, providerSession: session, pid: ALIVE, instance: backing.instance, runtimeVersion: '1.5.2', state: 'ready' }), { mode: 0o600 });
+    const legacy = (() => { const instance = randomUUID(), path = join(records, instance + '.json'); fs.writeFileSync(path, JSON.stringify({ schema: 1, instance, writer: writer(DEAD) }), { mode: 0o600 }); return path; })();
+    const oldTemp = join(records, '.ready-old'), newTemp = join(records, '.ready-new');
+    fs.writeFileSync(oldTemp, '{}', { mode: 0o600 }); old(oldTemp); fs.writeFileSync(newTemp, '{}', { mode: 0o600 });
+    const readiness = createReadiness(dir, '1.5.2', { exited, writerIdentity: () => self, random: () => 0 });
+    readiness.start(sessionCtx('pi_00000000-0000-4000-8000-000000000000'));
+    assert(!fs.existsSync(orphan.path), 'orphan of an exited writer removed');
+    assert(fs.existsSync(liveOrphan.path), 'live writer kept');
+    assert(fs.existsSync(backing.path), 'record backing an existing marker kept');
+    assert(fs.existsSync(legacy), 'record in an unknown shape kept');
+    assert(!fs.existsSync(oldTemp)); assert(fs.existsSync(newTemp));
+    const own = JSON.parse(fs.readFileSync(join(records, fs.readdirSync(records).find(name => ![orphan, liveOrphan, backing].some(r => name === r.instance + '.json') && name.endsWith('.json') && join(records, name) !== legacy)), 'utf8'));
+    assert.equal(own.providerSession, 'pi_00000000-0000-4000-8000-000000000000', 'own record names its session');
     readiness.stop();
   });
   console.log(JSON.stringify(results, null, 2));

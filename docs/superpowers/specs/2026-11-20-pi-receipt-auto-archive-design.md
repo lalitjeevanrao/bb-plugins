@@ -197,3 +197,9 @@ Re-review of 4cb7aa4 (same reviewer): the three stalls recover. Two follow-ups a
 - A pending release is forgotten only when `lstat` shows the lock is gone (`ENOENT`) or replaced (different inode). Any other error keeps it pending.
 - The status sweep lists each folder in full (up to 1,000,000 entries) and keeps a uniform reservoir sample of at most 64 candidates. No position can starve, even behind persistent live markers.
 Final re-review of f81193b: approved, no findings.
+
+Ponytail review of dd6bf84: verdict Ship, with one should-fix. A crash between writing an identity record and its marker, or before the record's rename, left files in `.instances/` that no sweep visited.
+
+- Fix: identity records now also store `providerSession`.
+- The sweep samples up to 64 names in `.instances/`. It removes a record when its marker (`<providerSession>/<instance>.json`) is absent and its writer provably exited. It also removes `.ready-*` files there that are older than 10 minutes.
+- A record whose marker exists stays, because the marker pass needs it as proof.

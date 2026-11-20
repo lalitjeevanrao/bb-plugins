@@ -66,6 +66,7 @@ Each Pi process writes a small status file per session, plus `copilot-session-cr
 
 - It removes a status file once its process provably exited (as for receipts), together with its identity record.
 - It removes `.ready-*` temporary files and empty session folders that have not changed for 10 minutes.
+- It removes an identity record left without its status file (a crash between the two writes) once its process provably exited, and old temporary files in `.instances/`. A record whose status file still exists stays, because that file needs it as proof.
 - It handles at most 256 session folders and 1024 files per run, and at most 64 status or temporary files per folder, picked at random from the whole folder. Other names are skipped without being touched. It starts at a random folder, so everything is reached over time. A single folder is listed up to its first million entries.
 
 Status files written by v0.3.4 and earlier have no identity record. They stay, and BB ignores them once their process is dead. To clear them, stop all Pi processes and move the status root to a fresh private sibling:
