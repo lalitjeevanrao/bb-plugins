@@ -1,6 +1,6 @@
 # Auto-archive closed Pi receipts (issue #21)
 
-Status: design for review (gate 1). Scope: `copilot-session-credits` Pi collector and host reader.
+Status: approved with changes by the gate-1 review (BB thread thr_prbazitgcf); its five findings are applied below. Scope: `copilot-session-credits` Pi collector and host reader.
 
 ## Problem
 
@@ -55,13 +55,13 @@ Per file, under the lock:
 
 ## When maintenance runs
 
-Constants: `maxFiles = 256`, start at `archiveAt = 224`, archive down to `archiveTo = 192`. For other `maxFiles` (tests) both scale by 7/8 and 3/4.
+Constants: `maxFiles = 256`, start at `archiveAt = 224`, archive down to `archiveTo = 192`. In general `archiveTo = floor(maxFiles * 3 / 4)` and `archiveAt = max(archiveTo + 1, floor(maxFiles * 7 / 8))`, so `archiveTo < archiveAt <= maxFiles` for every `maxFiles >= 1` (tests use small values).
 
-- **Before allocation**, inside the existing `.capture-lock` section of `openCapture`: if the entry count is `>= archiveAt`, run maintenance, then recount. At or above the cap with nothing movable, at-cap maintenance backs off for 60 s per process; the cheap count still runs on every call, so space freed by another process or by hand is used at once.
-- **Periodically while enabled**: `agent_end` runs maintenance at most once every 10 minutes when the count is `>= archiveAt`. It takes the lock with the same `mkdir`; a busy lock is skipped, never stolen or aged out. No timers, so reloads cannot leak intervals.
+- **Before allocation**, inside the existing `.capture-lock` section of `openCapture`: the `readdir` + `lstat` scan always runs. A `<uuid>.jsonl` with `nlink === 2` (crash leftover of a move) is repaired at once, whatever the count. If the count is `>= archiveAt`, the sweep runs, then the count is taken again. Any sweep that moves nothing backs off sweeping for 60 s in this process, at any count (the repair scan and the count still run every call), so space freed by another process or by hand is used at once.
+- **Periodically while enabled**: `agent_end` runs the same `readdir` + `lstat` scan without taking the lock. It takes the lock (same `mkdir`; a busy lock is skipped, never stolen or aged out) when it finds a repair, or when the count is `>= archiveAt` and the last periodic sweep was more than 10 minutes ago and no back-off is active. No timers, so reloads cannot leak intervals.
 - Never on idle startup, never when disabled, never creates the active root.
 
-Bounds per run: at most 64 moves, at most 16 MiB read. Candidates are sorted oldest first by `lstat` mtime. A 4 KiB tail read rejects files whose last row is not terminal before any full read.
+Bounds per run: at most 64 moves, at most 16 MiB read. Candidates are sorted oldest first by `lstat` mtime. A 4 KiB tail read rejects files whose last complete row is not terminal, or that do not end in `\n`, before any full read. If the window does not hold the whole last row, the full read decides.
 
 Maintenance errors never reach the provider call and never set `failed`. If the count is still at the cap, the call runs without a capture.
 
@@ -77,12 +77,16 @@ Maintenance errors never reach the provider call and never set `failed`. If the 
 Order: active root, then archive shards, then the legacy root.
 
 - Active and legacy: unchanged limits (257 names).
-- Archive: open only `<archive>/<session>` for each requested session and `<archive>/h_<hash>` for each hash recovered from a bridge header. Same file checks as today. At most 1024 names per shard; more marks the result damaged. The shared 8 MiB budget still applies.
+- Archive: open only `<archive>/<session>` for each requested session and `<archive>/h_<hash>` for each hash recovered from a bridge header. Same file checks as today. At most 1024 names per shard; more marks the result damaged. The writer never links into a shard that already holds 1024 entries (the receipt stays in the active root), so this only happens by hand. Every shard read belongs to the requested BB thread, so the damage stays scoped to it. The shared 8 MiB budget still applies.
 - Each `<epoch>.jsonl` name is counted once across all roots.
 - Race with a concurrent move (moves only go active → archive):
   - `ENOENT` in the active root is skipped. If the receipt is ours, its shard is read later.
   - A read error is held per name and becomes `capture-damaged` only if no other root yields that name. This covers the `nlink === 2` window.
 - `collector-full` still comes from the active-root count. New text: "Collector full. New captures blocked at 256 entries until closed receipts can be archived." The details action no longer says to stop Pi; it points to the cleanup docs if the state persists.
+
+## Field data (owner's work laptop, 2026-11-20)
+
+Read-only survey, counts only: 256 entries; last rows 254 `capture_stopped`, 2 `capture_checkpoint` (6.5 days untouched, crash leftovers). 254 eligible, no torn, foreign, linked or non-private files. 10.3 MiB total, largest 944 KiB. 207 sessions, at most 16 receipts per session, 16 with `providerSession: null`. Growth about 28 receipts a day (about 1 MiB a day). Legacy root 100 entries, legacy status 89, status root 385 entries (left alone; separate follow-up). Pi 1.5.2. All bounds above hold with room.
 
 ## Docs
 
