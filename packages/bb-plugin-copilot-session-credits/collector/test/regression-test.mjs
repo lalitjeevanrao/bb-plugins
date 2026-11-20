@@ -84,7 +84,8 @@ try {
     const directory = join(root, 'failed-open'), original = fs.fstatSync;
     try {
       fs.fstatSync = (...args) => ({ ...original(...args), nlink: 2 }); syncBuiltinESMExports();
-      const h = harness(directory); h.start('stream');
+      // No lock owner record: the fake fstat would also corrupt its bookkeeping, which is not under test here.
+      const h = harness(directory, { writerIdentity: () => null }); h.start('stream');
       assert.deepEqual(fs.readdirSync(directory), []);
     } finally { fs.fstatSync = original; syncBuiltinESMExports(); }
   });
@@ -112,7 +113,7 @@ try {
     const directory = join(root, 'swapped-open'), original = fs.fstatSync;
     try {
       fs.fstatSync = (...args) => { const stat = original(...args); return { ...stat, nlink: 2, ino: stat.ino + 1 }; }; syncBuiltinESMExports();
-      const h = harness(directory); h.start('stream');
+      const h = harness(directory, { writerIdentity: () => null }); h.start('stream');
       const names = fs.readdirSync(directory);
       assert.equal(names.length, 1); assert(names[0].endsWith('.jsonl'));
       assert.equal(fs.statSync(join(directory, names[0])).size, 0, 'unrecognized inode must survive cleanup');
