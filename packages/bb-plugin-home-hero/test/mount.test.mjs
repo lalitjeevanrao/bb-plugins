@@ -16,6 +16,7 @@ const THREAD = `<div class="mx-auto max-w-[760px]" id="thread-column"><article>t
 
 const tick = (ms = 120) => new Promise(resolve => setTimeout(resolve, ms));
 const greeting = doc => doc.querySelector(".bb-hero-greeting");
+const entranceEffect = doc => doc.getElementById(HERO_ID).getAttribute("data-bb-hero-effect");
 
 function setup(html, appearance = { displayName: "Alex", iconDataUrl: null }) {
   const dom = new JSDOM(`<body>${html}</body>`, { url: "http://localhost/" });
@@ -54,22 +55,29 @@ test("mounts when a home target arrives after starting on a thread", async () =>
   cleanup();
 });
 
-test("picks a new greeting and font across home -> thread -> home", async () => {
+test("picks a new greeting, font, and effect across home -> thread -> home", async () => {
   const { doc, cleanup } = setup(HOME);
-  await tick();
-  assert.ok(doc.getElementById(HERO_ID));
-  const first = greeting(doc);
+  try {
+    await tick();
+    assert.ok(doc.getElementById(HERO_ID));
+    const first = greeting(doc);
+    const firstEffect = entranceEffect(doc);
+    assert.ok(firstEffect);
 
-  swapBody(doc, THREAD);
-  await tick();
-  assert.equal(doc.getElementById(HERO_ID), null, "leaving home removes the hero");
-  assert.equal(doc.getElementById("bb-hero-style"), null, "and its styling");
+    swapBody(doc, THREAD);
+    await tick();
+    assert.equal(doc.getElementById(HERO_ID), null, "leaving home removes the hero");
+    assert.equal(doc.getElementById("bb-hero-style"), null, "and its styling");
 
-  swapBody(doc, HOME);
-  await tick();
-  assert.notEqual(greeting(doc).textContent, first.textContent);
-  assert.notEqual(greeting(doc).style.fontFamily, first.style.fontFamily);
-  cleanup();
+    swapBody(doc, HOME);
+    await tick();
+    assert.notEqual(greeting(doc).textContent, first.textContent);
+    assert.notEqual(greeting(doc).style.fontFamily, first.style.fontFamily);
+    assert.ok(entranceEffect(doc));
+    assert.notEqual(entranceEffect(doc), firstEffect);
+  } finally {
+    cleanup();
+  }
 });
 
 test("handles the compact home target", async () => {
@@ -106,8 +114,11 @@ test("each switch applies independently and preserves the other choice", async (
     };
     await tick();
     const initial = greeting(doc);
+    const initialEffect = entranceEffect(doc);
+    assert.ok(initialEffect);
     await refresh({});
     assert.equal(greeting(doc), initial, "refreshing the same appearance leaves the greeting mounted");
+    assert.equal(entranceEffect(doc), initialEffect);
 
     await refresh({ randomizeFont: false });
     const probe = doc.createElement("div");
@@ -117,7 +128,14 @@ test("each switch applies independently and preserves the other choice", async (
 
     await refresh({ randomizeFont: true, randomizeGreeting: false });
     assert.equal(greeting(doc).style.fontFamily, initial.style.fontFamily);
-    assert.equal(greeting(doc).textContent, formatGreeting(new Date().getHours(), "Alex"));
+    const fixedGreeting = formatGreeting(new Date().getHours(), "Alex");
+    assert.equal(greeting(doc).textContent, fixedGreeting);
+    assert.equal(entranceEffect(doc), initialEffect);
+
+    await refresh({ animateGreeting: false });
+    assert.equal(entranceEffect(doc), null);
+    assert.equal(greeting(doc).textContent, fixedGreeting);
+    assert.equal(greeting(doc).style.fontFamily, initial.style.fontFamily);
   } finally {
     cleanup();
   }

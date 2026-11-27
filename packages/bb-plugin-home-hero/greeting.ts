@@ -36,6 +36,20 @@ const GREETING_FONTS = [
   "'Courier New', 'Liberation Mono', monospace",
 ];
 
+const GREETING_EFFECTS = [
+  "typewriter",
+  "fade",
+  "rise",
+  "slide",
+  "pop",
+  "settle",
+  "focus",
+  "wipe",
+  "unfold",
+  "flip",
+  "swing",
+];
+
 export function greetingFor(hours: number): TimeOfDay {
   if (!Number.isFinite(hours) || hours < 12) return "Morning";
   if (hours < 17) return "Afternoon";
@@ -53,10 +67,11 @@ function chooseDifferent(choices: readonly string[], previous?: string): string 
   return available[Math.floor(Math.random() * available.length)];
 }
 
-export function chooseGreeting(hours: number, previous?: { label: string; fontFamily: string }) {
+export function chooseGreeting(hours: number, previous?: { label: string; fontFamily: string; effect: string }) {
   const timeOfDay = greetingFor(hours);
   return {
     label: chooseDifferent([...GREETINGS, timeOfDay, `Good ${timeOfDay.toLowerCase()}`], previous?.label),
     fontFamily: chooseDifferent(GREETING_FONTS, previous?.fontFamily),
+    effect: chooseDifferent(GREETING_EFFECTS, previous?.effect),
   };
 }

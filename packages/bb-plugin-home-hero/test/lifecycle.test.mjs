@@ -107,10 +107,22 @@ test("disposal removes the hero, styles and column marker", () => {
   assert.equal(doc.getElementById("bb-hero-style"), null);
 });
 
-test("reduced motion shows the full greeting immediately", () => {
+test("turning off effects or reducing motion shows the full greeting immediately", () => {
+  for (const options of [{ effect: null }, { effect: "typewriter", reducedMotion: true }, { effect: "rise", reducedMotion: true }]) {
+    const doc = page();
+    doc.defaultView.requestAnimationFrame = () => assert.fail("should not queue a typing frame");
+    applyHero(doc, { hours: 9, displayName: "Alex", ...options });
+    assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning, Alex");
+    assert.equal(doc.getElementById(HERO_ID).hasAttribute("data-bb-hero-effect"), false);
+  }
+});
+
+test("a CSS effect animates the full greeting without typing", () => {
   const doc = page();
-  applyHero(doc, { hours: 9, displayName: "Alex", reducedMotion: true });
+  doc.defaultView.requestAnimationFrame = () => assert.fail("should not queue a typing frame");
+  applyHero(doc, { hours: 9, displayName: "Alex", effect: "rise" });
   assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning, Alex");
+  assert.equal(doc.getElementById(HERO_ID).getAttribute("data-bb-hero-effect"), "rise");
 });
 
 test("renders the full greeting when requestAnimationFrame is unavailable", () => {
@@ -207,6 +219,13 @@ test("ignores a generic mx-auto column with no home composer target", () => {
   assert.equal(doc.querySelectorAll(`#${HERO_ID}`).length, 0);
   assert.equal(doc.getElementById("bb-hero-style"), null);
   dispose();
+});
+
+test("ignores the outgoing composer while opening settings", () => {
+  const { window } = new JSDOM(PAGE, { url: "http://bb.local/" });
+  assert.equal(findColumn(window.document)?.id, "column");
+  window.history.pushState(null, "", "/settings/plugins/home-hero");
+  assert.equal(findColumn(window.document), null);
 });
 
 test("a page without a composer column is harmless", () => {

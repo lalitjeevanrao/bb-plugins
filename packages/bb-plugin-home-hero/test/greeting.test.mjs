@@ -25,15 +25,16 @@ test("named greeting joins with a comma and space", () => {
   assert.equal(formatGreeting(17, "Alex"), "Evening, Alex");
 });
 
-test("random greetings and fonts exclude the previous picks", () => {
+test("random greetings, fonts, and effects exclude the previous picks", () => {
   const random = Math.random;
   Math.random = () => 0;
   try {
     const first = chooseGreeting(11);
-    assert.deepEqual(first, { label: "Hello", fontFamily: DEFAULT_GREETING_FONT });
+    assert.deepEqual(first, { label: "Hello", fontFamily: DEFAULT_GREETING_FONT, effect: "typewriter" });
     const second = chooseGreeting(11, first);
     assert.equal(second.label, "Hi");
     assert.notEqual(second.fontFamily, first.fontFamily);
+    assert.notEqual(second.effect, first.effect);
     assert.equal(formatGreeting(11, " Alex ", second.label), "Hi, Alex");
     assert.equal(formatGreeting(11, " ", second.label), "Hi");
   } finally {

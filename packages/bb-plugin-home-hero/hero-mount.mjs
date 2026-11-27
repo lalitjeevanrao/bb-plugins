@@ -26,7 +26,7 @@ async function fetchAppearance() {
  * @param {object} options
  * @param {AbortSignal} [options.signal]
  * @param {Document} [options.document]
- * @param {() => Promise<{displayName?: string, iconDataUrl?: string | null, randomizeFont?: boolean, randomizeGreeting?: boolean}>} [options.getAppearance]
+ * @param {() => Promise<Partial<import("./contract.ts").Appearance>>} [options.getAppearance]
  * @param {number} [options.pollMs]
  */
 export function mountHomeHero({
@@ -84,7 +84,8 @@ export function mountHomeHero({
     const iconDataUrl = appearance.iconDataUrl ?? null;
     const label = appearance.randomizeGreeting === false ? greetingFor(hours) : greeting.label;
     const fontFamily = appearance.randomizeFont === false ? undefined : greeting.fontFamily;
-    const key = JSON.stringify([displayName, iconDataUrl, label, fontFamily]);
+    const effect = appearance.animateGreeting === false ? null : greeting.effect;
+    const key = JSON.stringify([displayName, iconDataUrl, label, fontFamily, effect]);
     const hero = doc.getElementById(HERO_ID);
     if (appliedKey === key && hero && appliedColumn === column && column.contains(hero)) return;
     clearHero();
@@ -93,6 +94,7 @@ export function mountHomeHero({
       iconDataUrl,
       label,
       fontFamily,
+      effect,
       reducedMotion: doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
     });
     // Only a hero that actually landed counts as applied.

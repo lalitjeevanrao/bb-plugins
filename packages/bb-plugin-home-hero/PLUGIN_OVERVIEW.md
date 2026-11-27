@@ -11,6 +11,7 @@ People who spend the day in BB and want the home screen to feel like theirs, wit
 ## What it does
 
 - Rotates 30 English greetings and five font stacks as you open Home. The entire phrase shares one typeface.
+- Picks from 11 greeting entrance effects, including the classic typewriter. A setting controls animation, and reduced-motion preferences skip it.
 - Separate settings let you use a fixed Palatino font or a greeting based on the local clock.
 - Optional display name from settings, trimmed and limited to 80 characters.
 - Optional PNG/JPEG/WebP icon up to 256 KiB, decoded in the browser and structurally validated on the plugin server.

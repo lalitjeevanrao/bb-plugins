@@ -4,7 +4,7 @@ A greeting at the top of BB's home screen, with an optional name and an optional
 
 ![Home Hero greeting above the home composer](docs/screenshots/home-hero.png)
 
-Home Hero picks from 30 English greetings and five font stacks. Each time you open Home, it picks a greeting and a font for the whole phrase, including your name.
+Each time you open Home, Home Hero picks a greeting, a font for the whole phrase, and an entrance effect. The pool has 30 English greetings, five font stacks, and 11 effects including the classic typewriter.
 
 ## Install
 
@@ -23,6 +23,8 @@ From a clone: `bb plugin install .` inside this directory.
 **Randomize font** — on by default. Turn it off to use Palatino for the whole phrase.
 
 **Randomize greeting** — on by default. Turn it off to use **Morning**, **Afternoon** or **Evening** based on local time.
+
+**Animate greeting** — on by default. Turn it off to show the full greeting immediately. Home Hero also shows the full greeting immediately when your system prefers reduced motion.
 
 **Icon** — optional. Pick a PNG, JPEG or WebP up to 256 KiB. The browser decodes it, the plugin server checks the real file structure and its declared type, then stores it in this plugin's private BB storage. A file that fails validation leaves the previous icon in place. **Remove** returns to a text-only greeting.
 

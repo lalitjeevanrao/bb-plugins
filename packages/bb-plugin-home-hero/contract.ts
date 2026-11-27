@@ -9,6 +9,7 @@ export const appearanceSchema = z
     iconDataUrl: z.string().max(MAX_ICON_DATA_URL).nullable(),
     randomizeFont: z.boolean(),
     randomizeGreeting: z.boolean(),
+    animateGreeting: z.boolean(),
   })
   .strict();
 

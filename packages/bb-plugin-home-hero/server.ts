@@ -26,6 +26,12 @@ export default function plugin(bb: BbPluginApi) {
       description: "Pick a greeting each time you open Home. Turn off to use the time of day.",
       default: true,
     },
+    animateGreeting: {
+      type: "boolean",
+      label: "Animate greeting",
+      description: "When off, the full greeting appears immediately.",
+      default: true,
+    },
   });
 
   const db = bb.storage.database();
@@ -41,12 +47,13 @@ export default function plugin(bb: BbPluginApi) {
   };
 
   const appearance = async () => {
-    const { displayName, randomizeFont, randomizeGreeting } = await settings.get();
+    const { displayName, randomizeFont, randomizeGreeting, animateGreeting } = await settings.get();
     return appearanceSchema.parse({
       displayName: typeof displayName === "string" ? displayName.trim().slice(0, MAX_DISPLAY_NAME) : "",
       iconDataUrl: readIcon(),
       randomizeFont: randomizeFont !== false,
       randomizeGreeting: randomizeGreeting !== false,
+      animateGreeting: animateGreeting !== false,
     });
   };
 
