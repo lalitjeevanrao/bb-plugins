@@ -1,10 +1,10 @@
 # Home Hero
 
-A time-of-day greeting at the top of BB's home screen, with an optional name and an optional icon you upload.
+A greeting at the top of BB's home screen, with an optional name and an optional icon you upload.
 
 ![Home Hero greeting above the home composer](docs/screenshots/home-hero.png)
 
-The greeting keeps the original Palatino italic / Georgia small-caps typography and reads the local time: **Morning**, **Afternoon** or **Evening**. With a name saved it becomes **Afternoon, Alex**.
+Each time you open Home, Home Hero picks a greeting, a font for the whole phrase, and an entrance effect. The pool has 30 English greetings, five font stacks, and 11 effects including the classic typewriter.
 
 ## Install
 
@@ -18,7 +18,13 @@ From a clone: `bb plugin install .` inside this directory.
 
 ## Settings
 
-**Greeting name** — up to 80 characters, trimmed. Leave it blank to show the time of day only; no stray comma appears.
+**Greeting name** — up to 80 characters, trimmed. Leave it blank for a greeting without a name.
+
+**Randomize font** — on by default. Turn it off to use Palatino for the whole phrase.
+
+**Randomize greeting** — on by default. Turn it off to use **Morning**, **Afternoon** or **Evening** based on local time.
+
+**Animate greeting** — on by default. Turn it off to show the full greeting immediately. Home Hero also shows the full greeting immediately when your system prefers reduced motion.
 
 **Icon** — optional. Pick a PNG, JPEG or WebP up to 256 KiB. The browser decodes it, the plugin server checks the real file structure and its declared type, then stores it in this plugin's private BB storage. A file that fails validation leaves the previous icon in place. **Remove** returns to a text-only greeting.
 

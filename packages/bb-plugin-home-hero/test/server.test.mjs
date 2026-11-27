@@ -9,13 +9,35 @@ const svg = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
 
-test("a fresh install has no name and no icon", async () => {
+test("a fresh install randomizes the greeting and font and animates the greeting", async () => {
   const { bb, harness } = createFakePluginHost({ pluginId: "home-hero" });
   plugin(bb);
   assert.deepEqual(await harness.behavior.callRpc("getAppearance", null), {
     displayName: "",
     iconDataUrl: null,
+    randomizeFont: true,
+    randomizeGreeting: true,
+    animateGreeting: true,
   });
+  await harness.lifecycle.dispose();
+});
+
+test("an existing install can turn off each default independently", async () => {
+  const { bb, harness } = createFakePluginHost({ pluginId: "home-hero", settings: { displayName: "Alex" } });
+  plugin(bb);
+  await harness.behavior.setSettings({ randomizeFont: false });
+  const appearance = await harness.behavior.callRpc("getAppearance", null);
+  assert.equal(appearance.displayName, "Alex");
+  assert.equal(appearance.randomizeFont, false);
+  assert.equal(appearance.randomizeGreeting, true);
+  assert.equal(appearance.animateGreeting, true);
+  await harness.behavior.setSettings({ animateGreeting: false });
+  const saved = await harness.behavior.callRpc("setIcon", { iconDataUrl: png });
+  assert.equal(saved.randomizeFont, false);
+  assert.equal(saved.randomizeGreeting, true);
+  assert.equal(saved.animateGreeting, false);
+  await harness.behavior.setSettings({ randomizeGreeting: false });
+  assert.equal((await harness.behavior.callRpc("getAppearance", null)).randomizeGreeting, false);
   await harness.lifecycle.dispose();
 });
 

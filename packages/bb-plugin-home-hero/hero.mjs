@@ -1,23 +1,71 @@
+import { DEFAULT_GREETING_FONT, formatGreeting } from "./greeting.ts";
+
 export const HERO_ID = "bb-hero";
 const STYLE_ID = "bb-hero-style";
 const COLUMN_ATTR = "data-bb-hero-column";
+const EFFECT_ATTR = "data-bb-hero-effect";
 // Only a real home composer target counts: the home tree exposes `root-compose-*`,
 // so a generic `.mx-auto` on another page can never host the hero.
 const HOME_SELECTOR = '[data-testid^="root-compose"]';
 const COMPOSER_SELECTOR = '[class*="group/promptbox"]';
 const COLUMN_ANCESTOR = '[class*="max-w-[760px]"]';
-const TYPE_MS = 850;
-const TYPE_DELAY_MS = 200;
+const TYPE_MS = 950;
+const TYPE_DELAY_MS = 250;
 
 const CSS = `
 [${COLUMN_ATTR}]{min-height:100%;flex:1 1 0%;justify-content:safe center;padding-top:max(10vh,4rem);padding-bottom:4vh}
-#${HERO_ID}{display:flex;align-items:center;justify-content:center;gap:.875rem;max-width:min(100%,52rem);margin:0 auto 1.75rem;padding:0 1rem;text-align:center;user-select:none;animation:bb-hero-in 200ms ease-out both}
+#${HERO_ID}{display:flex;align-items:center;justify-content:center;gap:.875rem;max-width:min(100%,52rem);margin:0 auto 1.75rem;padding:0 1rem;text-align:center;user-select:none}
 #${HERO_ID} .bb-hero-icon{width:3.25rem;height:3.25rem;border-radius:.9rem;object-fit:cover;flex:none}
-#${HERO_ID} .bb-hero-greeting{font-size:clamp(24px,6vw,37px);line-height:1.15;opacity:.85;overflow-wrap:anywhere;min-width:0}
-#${HERO_ID} .bb-hero-hello{font-family:Palatino,'Palatino Linotype',serif;font-style:italic}
-#${HERO_ID} .bb-hero-name{font-family:Georgia,serif;font-weight:400;font-variant:small-caps}
+#${HERO_ID} .bb-hero-greeting{font-size:clamp(24px,6vw,37px);font-style:italic;line-height:1.15;opacity:.85;overflow-wrap:anywhere;min-width:0}
+
+@media (prefers-reduced-motion: no-preference) {
+  #${HERO_ID}[${EFFECT_ATTR}="typewriter"] {
+    animation: bb-hero-in ${TYPE_DELAY_MS}ms ease-in-out backwards;
+  }
+  #${HERO_ID} .bb-hero-greeting {
+    animation: var(--bb-hero-entrance, none) 800ms ease-in-out backwards;
+  }
+  #${HERO_ID} .bb-hero-typing {
+    animation: bb-hero-fade 520ms ease-in-out ${TYPE_DELAY_MS}ms backwards;
+  }
+}
+
 @keyframes bb-hero-in{from{opacity:0}to{opacity:1}}
-@media (prefers-reduced-motion: reduce){#${HERO_ID}{animation:none}}
+@keyframes bb-hero-fade {
+  from { opacity: 0; }
+}
+@keyframes bb-hero-rise {
+  from { opacity: 0; transform: translateY(.14em); }
+}
+@keyframes bb-hero-slide {
+  from { opacity: 0; transform: translateX(-.18em); }
+}
+@keyframes bb-hero-pop {
+  from { opacity: 0; transform: scale(.975); }
+  70% { transform: scale(1.008); }
+}
+@keyframes bb-hero-settle {
+  from { opacity: 0; transform: scale(1.025); }
+}
+@keyframes bb-hero-focus {
+  from { opacity: 0; filter: blur(.045em); }
+}
+@keyframes bb-hero-wipe {
+  from { opacity: 0; clip-path: inset(-.35em 22% -.35em -.35em); }
+  to { clip-path: inset(-.35em); }
+}
+@keyframes bb-hero-unfold {
+  from { opacity: 0; clip-path: inset(18% -.35em); }
+  to { clip-path: inset(-.35em); }
+}
+@keyframes bb-hero-flip {
+  from { opacity: 0; transform: perspective(480px) rotateX(-12deg); }
+  to { transform: perspective(480px) rotateX(0deg); }
+}
+@keyframes bb-hero-swing {
+  from { opacity: 0; transform: rotate(-2deg); transform-origin: 25% 70%; }
+  to { transform: rotate(0deg); transform-origin: 25% 70%; }
+}
 `;
 
 /** A desktop/compact duplicate tree can be CSS-hidden; never target it. */
@@ -32,6 +80,8 @@ export function isHiddenElement(node) {
 }
 
 export function findColumn(doc = globalThis.document) {
+  // The outgoing Home composer may still be mounted during a settings transition.
+  if (/^\/settings(?:\/|$)/.test(doc.location?.pathname ?? "")) return null;
   for (const composer of doc.querySelectorAll(COMPOSER_SELECTOR)) {
     // The home anchor keeps an unrelated page's composer or `.mx-auto` out.
     if (!composer.closest(HOME_SELECTOR) || isHiddenElement(composer)) continue;
@@ -57,20 +107,30 @@ function registryFor(doc) {
  * disposer tied to one owner: re-rendering replaces the previous hero, and the
  * DOM is only removed once the last mounted owner has disposed.
  * @param {Document} doc
- * @param {{ displayName?: string, iconDataUrl?: string | null, hours?: number, reducedMotion?: boolean }} [options]
+ * @param {{ displayName?: string, iconDataUrl?: string | null, hours?: number, label?: string, fontFamily?: string, effect?: string | null, reducedMotion?: boolean }} [options]
  * @returns {() => void}
  */
-export function applyHero(doc, { displayName = "", iconDataUrl = null, hours, reducedMotion = false } = {}) {
+export function applyHero(doc, {
+  displayName = "",
+  iconDataUrl = null,
+  hours = new Date().getHours(),
+  label,
+  fontFamily = DEFAULT_GREETING_FONT,
+  effect = "typewriter",
+  reducedMotion = false,
+} = {}) {
   const column = findColumn(doc);
   if (!column) return () => {};
   const registry = registryFor(doc);
   registry.owners += 1;
   registry.cleanup?.();
   registry.cleanup = render(doc, column, {
-    displayName: String(displayName ?? "").trim(),
+    displayName: String(displayName ?? ""),
     iconDataUrl,
     hours,
-    reducedMotion,
+    label,
+    fontFamily,
+    effect: reducedMotion ? null : effect,
   });
 
   let released = false;
@@ -85,11 +145,11 @@ export function applyHero(doc, { displayName = "", iconDataUrl = null, hours, re
   };
 }
 
-function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion }) {
+function render(doc, column, { displayName, iconDataUrl, hours, label, fontFamily, effect }) {
   const view = doc.defaultView;
-  const hour = Number.isFinite(hours) ? hours : new Date().getHours();
-  const full = greetingText(hour, displayName);
-  const helloText = full.slice(0, full.length - displayName.length);
+  const frame = view?.requestAnimationFrame?.bind(view);
+  const canType = effect === "typewriter" && Boolean(frame);
+  const full = formatGreeting(hours, displayName, label);
 
   let style = doc.getElementById(STYLE_ID);
   if (!style) {
@@ -102,6 +162,7 @@ function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion })
   const hero = doc.createElement("div");
   hero.id = HERO_ID;
   hero.setAttribute("role", "presentation");
+  if (effect) hero.setAttribute(EFFECT_ATTR, effect);
   if (iconDataUrl) {
     const icon = doc.createElement("img");
     icon.className = "bb-hero-icon";
@@ -112,42 +173,34 @@ function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion })
   }
   const greeting = doc.createElement("div");
   greeting.className = "bb-hero-greeting";
-  // In-flow text: the centered flex row grows symmetrically as characters appear,
-  // so the greeting expands from its center and pushes the icon outward.
-  const hello = doc.createElement("span");
-  hello.className = "bb-hero-hello";
-  const name = doc.createElement("span");
-  name.className = "bb-hero-name";
-  greeting.append(hello, name);
+  greeting.style.fontFamily = fontFamily;
+  if (canType) {
+    greeting.classList.add("bb-hero-typing");
+  } else if (effect && effect !== "typewriter") {
+    greeting.style.setProperty("--bb-hero-entrance", `bb-hero-${effect}`);
+  }
+  const text = doc.createTextNode(canType ? "" : full);
+  greeting.append(text);
   hero.append(greeting);
-
-  let painted = -1;
-  const paint = length => {
-    if (length === painted) return;
-    painted = length;
-    if (length <= helloText.length) {
-      hello.textContent = full.slice(0, length);
-      name.textContent = "";
-      return;
-    }
-    hello.textContent = helloText;
-    name.textContent = full.slice(helloText.length, length);
-  };
-  const frame = view?.requestAnimationFrame?.bind(view);
-  const canAnimate = !reducedMotion && Boolean(frame) && full.length > 0;
-  paint(canAnimate ? 0 : full.length);
 
   column.prepend(hero);
   column.setAttribute(COLUMN_ATTR, "");
 
   let queued = 0;
   let disposed = false;
-  if (canAnimate) {
+  if (canType) {
+    // The centered flex row grows as characters appear, pushing the icon outward.
+    const characters = Array.from(full);
     const started = Date.now() + TYPE_DELAY_MS;
+    let painted = 0;
     const tick = () => {
       if (disposed) return;
       const progress = Math.min(1, Math.max(0, (Date.now() - started) / TYPE_MS));
-      paint(progress > 0 ? Math.max(1, Math.round(full.length * progress)) : 0);
+      const length = progress > 0 ? Math.max(1, Math.round(characters.length * progress)) : 0;
+      if (length !== painted) {
+        painted = length;
+        text.data = characters.slice(0, length).join("");
+      }
       if (progress < 1) queued = frame(tick);
     };
     queued = frame(tick);
@@ -161,14 +214,4 @@ function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion })
     column.removeAttribute(COLUMN_ATTR);
     if (!doc.querySelector(`[${COLUMN_ATTR}]`)) doc.getElementById(STYLE_ID)?.remove();
   };
-}
-
-function greetingText(hours, name) {
-  return name ? `${greetingLabel(hours)}, ${name}` : greetingLabel(hours);
-}
-
-function greetingLabel(hours) {
-  if (hours < 12) return "Morning";
-  if (hours < 17) return "Afternoon";
-  return "Evening";
 }

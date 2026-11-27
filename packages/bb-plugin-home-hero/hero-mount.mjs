@@ -1,3 +1,4 @@
+import { chooseGreeting, greetingFor } from "./greeting.ts";
 import { applyHero, findColumn, HERO_ID } from "./hero.mjs";
 
 export const APPEARANCE_PATH = "/api/v1/plugins/home-hero/rpc/getAppearance";
@@ -25,7 +26,7 @@ async function fetchAppearance() {
  * @param {object} options
  * @param {AbortSignal} [options.signal]
  * @param {Document} [options.document]
- * @param {() => Promise<{displayName?: string, iconDataUrl?: string | null}>} [options.getAppearance]
+ * @param {() => Promise<Partial<import("./contract.ts").Appearance>>} [options.getAppearance]
  * @param {number} [options.pollMs]
  */
 export function mountHomeHero({
@@ -34,10 +35,14 @@ export function mountHomeHero({
   getAppearance = fetchAppearance,
   pollMs = REFRESH_MS,
 } = {}) {
-  let appearance = { displayName: "", iconDataUrl: null };
+  let appearance = {};
   let appliedKey = null;
   let appliedColumn = null;
-  let loadedColumn = null;
+  let homeColumn = null;
+  let homePath;
+  let greeting;
+  let pendingHomeAppearance = false;
+  let requestVersion = 0;
   let disposeHero = () => {};
   let disposed = false;
   let timer = 0;
@@ -51,27 +56,46 @@ export function mountHomeHero({
     appliedColumn = null;
   };
 
-  const reconcile = () => {
+  const reconcile = (refresh = true) => {
     if (disposed) return;
     const column = findColumn(doc);
     if (!column) {
       // Not on a home surface: no hero and no hero styling.
+      homeColumn = null;
       clearHero();
       return;
     }
-    if (column !== loadedColumn) {
-      // A new home surface shows the cached appearance at once and re-reads it.
-      loadedColumn = column;
-      void load();
+    const path = doc.location?.pathname;
+    const hours = new Date().getHours();
+    if (column !== homeColumn || path !== homePath) {
+      homeColumn = column;
+      homePath = path;
+      greeting = chooseGreeting(hours, greeting);
+      if (refresh) {
+        // Settings may have changed while Home was closed.
+        pendingHomeAppearance = true;
+        clearHero();
+        void load();
+        return;
+      }
     }
-    const key = JSON.stringify([appearance.displayName ?? "", appearance.iconDataUrl ?? null]);
+    if (pendingHomeAppearance) return;
+    const displayName = appearance.displayName ?? "";
+    const iconDataUrl = appearance.iconDataUrl ?? null;
+    const label = appearance.randomizeGreeting === false ? greetingFor(hours) : greeting.label;
+    const fontFamily = appearance.randomizeFont === false ? undefined : greeting.fontFamily;
+    const effect = appearance.animateGreeting === false ? null : greeting.effect;
+    const key = JSON.stringify([displayName, iconDataUrl, label, fontFamily, effect]);
     const hero = doc.getElementById(HERO_ID);
     if (appliedKey === key && hero && appliedColumn === column && column.contains(hero)) return;
     clearHero();
     disposeHero = applyHero(doc, {
-      displayName: appearance.displayName ?? "",
-      iconDataUrl: appearance.iconDataUrl ?? null,
-      reducedMotion: globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+      displayName,
+      iconDataUrl,
+      label,
+      fontFamily,
+      effect,
+      reducedMotion: doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
     });
     // Only a hero that actually landed counts as applied.
     if (doc.getElementById(HERO_ID)) {
@@ -89,13 +113,16 @@ export function mountHomeHero({
   };
 
   const load = async () => {
+    const request = ++requestVersion;
     try {
-      appearance = (await getAppearance()) ?? { displayName: "", iconDataUrl: null };
+      const result = await getAppearance();
+      if (!disposed && request === requestVersion) appearance = result ?? {};
     } catch {
-      return; // keep the current hero; the next poll retries
+      // Use the cached appearance if the request fails. The next poll retries.
     }
-    loadedColumn = findColumn(doc);
-    reconcile();
+    if (disposed || request !== requestVersion) return;
+    pendingHomeAppearance = false;
+    reconcile(false);
   };
 
   const onVisible = () => {
@@ -111,7 +138,7 @@ export function mountHomeHero({
     timer = 0;
     observer?.disconnect();
     doc.removeEventListener("visibilitychange", onVisible);
-    clearTimeout(pollTimer);
+    clearInterval(pollTimer);
     clearInterval(sweepTimer);
     clearHero();
   };

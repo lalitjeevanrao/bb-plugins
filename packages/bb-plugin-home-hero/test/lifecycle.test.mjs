@@ -49,20 +49,21 @@ test("finds the compact homepage column on narrow viewports", () => {
   dispose();
 });
 
-test("greets with the configured name", () => {
+test("the greeting and name share one font", () => {
   const doc = page();
-  applyHero(doc, { hours: 14, displayName: "Alex" });
-  assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Afternoon, Alex");
-  assert.equal(doc.querySelector(".bb-hero-name").textContent, "Alex");
-  assert.equal(doc.querySelector(".bb-hero-hello").textContent, "Afternoon, ");
+  applyHero(doc, { displayName: "Alex", label: "Hello there", fontFamily: "Georgia, serif" });
+  const greeting = doc.querySelector(".bb-hero-greeting");
+  assert.equal(greeting.textContent, "Hello there, Alex");
+  assert.equal(greeting.style.fontFamily, "Georgia, serif");
+  assert.equal(greeting.children.length, 0);
 });
 
 test("treats the name as text, never markup", () => {
   const doc = page();
   applyHero(doc, { hours: 9, displayName: "<b>Alex</b>" });
-  const name = doc.querySelector(".bb-hero-name");
-  assert.equal(name.textContent, "<b>Alex</b>");
-  assert.equal(name.querySelector("b"), null);
+  const greeting = doc.querySelector(".bb-hero-greeting");
+  assert.equal(greeting.textContent, "Morning, <b>Alex</b>");
+  assert.equal(greeting.querySelector("b"), null);
 });
 
 test("shows the uploaded icon only when one exists", () => {
@@ -106,10 +107,22 @@ test("disposal removes the hero, styles and column marker", () => {
   assert.equal(doc.getElementById("bb-hero-style"), null);
 });
 
-test("reduced motion shows the full greeting immediately", () => {
+test("turning off effects or reducing motion shows the full greeting immediately", () => {
+  for (const options of [{ effect: null }, { effect: "typewriter", reducedMotion: true }, { effect: "rise", reducedMotion: true }]) {
+    const doc = page();
+    doc.defaultView.requestAnimationFrame = () => assert.fail("should not queue a typing frame");
+    applyHero(doc, { hours: 9, displayName: "Alex", ...options });
+    assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning, Alex");
+    assert.equal(doc.getElementById(HERO_ID).hasAttribute("data-bb-hero-effect"), false);
+  }
+});
+
+test("a CSS effect animates the full greeting without typing", () => {
   const doc = page();
-  applyHero(doc, { hours: 9, displayName: "Alex", reducedMotion: true });
+  doc.defaultView.requestAnimationFrame = () => assert.fail("should not queue a typing frame");
+  applyHero(doc, { hours: 9, displayName: "Alex", effect: "rise" });
   assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Morning, Alex");
+  assert.equal(doc.getElementById(HERO_ID).getAttribute("data-bb-hero-effect"), "rise");
 });
 
 test("renders the full greeting when requestAnimationFrame is unavailable", () => {
@@ -141,9 +154,7 @@ test("typing grows the in-flow greeting and writes only on character change", as
     // shifts outward instead of the text filling a reserved box left to right.
     assert.equal(doc.querySelector(".bb-hero-sizer"), null);
     assert.equal(doc.querySelector(".bb-hero-typed"), null);
-    assert.equal(greeting.children.length, 2);
-    assert.equal(greeting.firstElementChild.className, "bb-hero-hello");
-    assert.equal(greeting.lastElementChild.className, "bb-hero-name");
+    assert.equal(greeting.children.length, 0);
     assert.equal(greeting.textContent, "", "nothing is painted before the entrance ends");
 
     const writes = [];
@@ -208,6 +219,13 @@ test("ignores a generic mx-auto column with no home composer target", () => {
   assert.equal(doc.querySelectorAll(`#${HERO_ID}`).length, 0);
   assert.equal(doc.getElementById("bb-hero-style"), null);
   dispose();
+});
+
+test("ignores the outgoing composer while opening settings", () => {
+  const { window } = new JSDOM(PAGE, { url: "http://bb.local/" });
+  assert.equal(findColumn(window.document)?.id, "column");
+  window.history.pushState(null, "", "/settings/plugins/home-hero");
+  assert.equal(findColumn(window.document), null);
 });
 
 test("a page without a composer column is harmless", () => {

@@ -7,6 +7,9 @@ export const appearanceSchema = z
   .object({
     displayName: z.string().max(80),
     iconDataUrl: z.string().max(MAX_ICON_DATA_URL).nullable(),
+    randomizeFont: z.boolean(),
+    randomizeGreeting: z.boolean(),
+    animateGreeting: z.boolean(),
   })
   .strict();
 
