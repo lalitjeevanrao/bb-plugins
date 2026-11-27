@@ -49,20 +49,21 @@ test("finds the compact homepage column on narrow viewports", () => {
   dispose();
 });
 
-test("greets with the configured name", () => {
+test("the greeting and name share one font", () => {
   const doc = page();
-  applyHero(doc, { hours: 14, displayName: "Alex" });
-  assert.equal(doc.querySelector(".bb-hero-greeting").textContent, "Afternoon, Alex");
-  assert.equal(doc.querySelector(".bb-hero-name").textContent, "Alex");
-  assert.equal(doc.querySelector(".bb-hero-hello").textContent, "Afternoon, ");
+  applyHero(doc, { displayName: "Alex", label: "Hello there", fontFamily: "Georgia, serif" });
+  const greeting = doc.querySelector(".bb-hero-greeting");
+  assert.equal(greeting.textContent, "Hello there, Alex");
+  assert.equal(greeting.style.fontFamily, "Georgia, serif");
+  assert.equal(greeting.children.length, 0);
 });
 
 test("treats the name as text, never markup", () => {
   const doc = page();
   applyHero(doc, { hours: 9, displayName: "<b>Alex</b>" });
-  const name = doc.querySelector(".bb-hero-name");
-  assert.equal(name.textContent, "<b>Alex</b>");
-  assert.equal(name.querySelector("b"), null);
+  const greeting = doc.querySelector(".bb-hero-greeting");
+  assert.equal(greeting.textContent, "Morning, <b>Alex</b>");
+  assert.equal(greeting.querySelector("b"), null);
 });
 
 test("shows the uploaded icon only when one exists", () => {
@@ -141,9 +142,7 @@ test("typing grows the in-flow greeting and writes only on character change", as
     // shifts outward instead of the text filling a reserved box left to right.
     assert.equal(doc.querySelector(".bb-hero-sizer"), null);
     assert.equal(doc.querySelector(".bb-hero-typed"), null);
-    assert.equal(greeting.children.length, 2);
-    assert.equal(greeting.firstElementChild.className, "bb-hero-hello");
-    assert.equal(greeting.lastElementChild.className, "bb-hero-name");
+    assert.equal(greeting.children.length, 0);
     assert.equal(greeting.textContent, "", "nothing is painted before the entrance ends");
 
     const writes = [];

@@ -9,13 +9,30 @@ const svg = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
 
-test("a fresh install has no name and no icon", async () => {
+test("a fresh install has no name or icon and randomizes both choices", async () => {
   const { bb, harness } = createFakePluginHost({ pluginId: "home-hero" });
   plugin(bb);
   assert.deepEqual(await harness.behavior.callRpc("getAppearance", null), {
     displayName: "",
     iconDataUrl: null,
+    randomizeFont: true,
+    randomizeGreeting: true,
   });
+  await harness.lifecycle.dispose();
+});
+
+test("an existing install can turn off each default independently", async () => {
+  const { bb, harness } = createFakePluginHost({ pluginId: "home-hero", settings: { displayName: "Alex" } });
+  plugin(bb);
+  await harness.behavior.setSettings({ randomizeFont: false });
+  const appearance = await harness.behavior.callRpc("getAppearance", null);
+  assert.equal(appearance.displayName, "Alex");
+  assert.equal(appearance.randomizeFont, false);
+  assert.equal(appearance.randomizeGreeting, true);
+  await harness.behavior.setSettings({ randomizeGreeting: false });
+  const saved = await harness.behavior.callRpc("setIcon", { iconDataUrl: png });
+  assert.equal(saved.randomizeFont, false);
+  assert.equal(saved.randomizeGreeting, false);
   await harness.lifecycle.dispose();
 });
 

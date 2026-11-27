@@ -1,3 +1,5 @@
+import { DEFAULT_GREETING_FONT, formatGreeting } from "./greeting.ts";
+
 export const HERO_ID = "bb-hero";
 const STYLE_ID = "bb-hero-style";
 const COLUMN_ATTR = "data-bb-hero-column";
@@ -13,9 +15,7 @@ const CSS = `
 [${COLUMN_ATTR}]{min-height:100%;flex:1 1 0%;justify-content:safe center;padding-top:max(10vh,4rem);padding-bottom:4vh}
 #${HERO_ID}{display:flex;align-items:center;justify-content:center;gap:.875rem;max-width:min(100%,52rem);margin:0 auto 1.75rem;padding:0 1rem;text-align:center;user-select:none;animation:bb-hero-in 200ms ease-out both}
 #${HERO_ID} .bb-hero-icon{width:3.25rem;height:3.25rem;border-radius:.9rem;object-fit:cover;flex:none}
-#${HERO_ID} .bb-hero-greeting{font-size:clamp(24px,6vw,37px);line-height:1.15;opacity:.85;overflow-wrap:anywhere;min-width:0}
-#${HERO_ID} .bb-hero-hello{font-family:Palatino,'Palatino Linotype',serif;font-style:italic}
-#${HERO_ID} .bb-hero-name{font-family:Georgia,serif;font-weight:400;font-variant:small-caps}
+#${HERO_ID} .bb-hero-greeting{font-size:clamp(24px,6vw,37px);font-style:italic;line-height:1.15;opacity:.85;overflow-wrap:anywhere;min-width:0}
 @keyframes bb-hero-in{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion: reduce){#${HERO_ID}{animation:none}}
 `;
@@ -57,19 +57,28 @@ function registryFor(doc) {
  * disposer tied to one owner: re-rendering replaces the previous hero, and the
  * DOM is only removed once the last mounted owner has disposed.
  * @param {Document} doc
- * @param {{ displayName?: string, iconDataUrl?: string | null, hours?: number, reducedMotion?: boolean }} [options]
+ * @param {{ displayName?: string, iconDataUrl?: string | null, hours?: number, label?: string, fontFamily?: string, reducedMotion?: boolean }} [options]
  * @returns {() => void}
  */
-export function applyHero(doc, { displayName = "", iconDataUrl = null, hours, reducedMotion = false } = {}) {
+export function applyHero(doc, {
+  displayName = "",
+  iconDataUrl = null,
+  hours = new Date().getHours(),
+  label,
+  fontFamily = DEFAULT_GREETING_FONT,
+  reducedMotion = false,
+} = {}) {
   const column = findColumn(doc);
   if (!column) return () => {};
   const registry = registryFor(doc);
   registry.owners += 1;
   registry.cleanup?.();
   registry.cleanup = render(doc, column, {
-    displayName: String(displayName ?? "").trim(),
+    displayName: String(displayName ?? ""),
     iconDataUrl,
     hours,
+    label,
+    fontFamily,
     reducedMotion,
   });
 
@@ -85,11 +94,9 @@ export function applyHero(doc, { displayName = "", iconDataUrl = null, hours, re
   };
 }
 
-function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion }) {
+function render(doc, column, { displayName, iconDataUrl, hours, label, fontFamily, reducedMotion }) {
   const view = doc.defaultView;
-  const hour = Number.isFinite(hours) ? hours : new Date().getHours();
-  const full = greetingText(hour, displayName);
-  const helloText = full.slice(0, full.length - displayName.length);
+  const full = formatGreeting(hours, displayName, label);
 
   let style = doc.getElementById(STYLE_ID);
   if (!style) {
@@ -112,30 +119,23 @@ function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion })
   }
   const greeting = doc.createElement("div");
   greeting.className = "bb-hero-greeting";
+  greeting.style.fontFamily = fontFamily;
   // In-flow text: the centered flex row grows symmetrically as characters appear,
   // so the greeting expands from its center and pushes the icon outward.
-  const hello = doc.createElement("span");
-  hello.className = "bb-hero-hello";
-  const name = doc.createElement("span");
-  name.className = "bb-hero-name";
-  greeting.append(hello, name);
+  const text = doc.createTextNode("");
+  greeting.append(text);
   hero.append(greeting);
 
+  const characters = Array.from(full);
   let painted = -1;
   const paint = length => {
     if (length === painted) return;
     painted = length;
-    if (length <= helloText.length) {
-      hello.textContent = full.slice(0, length);
-      name.textContent = "";
-      return;
-    }
-    hello.textContent = helloText;
-    name.textContent = full.slice(helloText.length, length);
+    text.data = characters.slice(0, length).join("");
   };
   const frame = view?.requestAnimationFrame?.bind(view);
-  const canAnimate = !reducedMotion && Boolean(frame) && full.length > 0;
-  paint(canAnimate ? 0 : full.length);
+  const canAnimate = !reducedMotion && Boolean(frame);
+  paint(canAnimate ? 0 : characters.length);
 
   column.prepend(hero);
   column.setAttribute(COLUMN_ATTR, "");
@@ -147,7 +147,7 @@ function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion })
     const tick = () => {
       if (disposed) return;
       const progress = Math.min(1, Math.max(0, (Date.now() - started) / TYPE_MS));
-      paint(progress > 0 ? Math.max(1, Math.round(full.length * progress)) : 0);
+      paint(progress > 0 ? Math.max(1, Math.round(characters.length * progress)) : 0);
       if (progress < 1) queued = frame(tick);
     };
     queued = frame(tick);
@@ -161,14 +161,4 @@ function render(doc, column, { displayName, iconDataUrl, hours, reducedMotion })
     column.removeAttribute(COLUMN_ATTR);
     if (!doc.querySelector(`[${COLUMN_ATTR}]`)) doc.getElementById(STYLE_ID)?.remove();
   };
-}
-
-function greetingText(hours, name) {
-  return name ? `${greetingLabel(hours)}, ${name}` : greetingLabel(hours);
-}
-
-function greetingLabel(hours) {
-  if (hours < 12) return "Morning";
-  if (hours < 17) return "Afternoon";
-  return "Evening";
 }

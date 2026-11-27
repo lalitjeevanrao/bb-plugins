@@ -2,7 +2,7 @@
 
 **Greets you on BB's home screen and gets out of the way.**
 
-Home Hero replaces the empty home composer header with a small greeting that follows the local clock — Morning, Afternoon or Evening — optionally followed by your name. An uploaded icon sits beside it; without one the greeting is just text, so nothing personal ships with the plugin.
+Home Hero puts a short greeting above the home composer, optionally followed by your name. You can upload an icon to show beside it.
 
 ## Who it is for
 
@@ -10,7 +10,8 @@ People who spend the day in BB and want the home screen to feel like theirs, wit
 
 ## What it does
 
-- Time-of-day greeting with the original typography (Palatino italic hello, Georgia small-caps name).
+- Rotates 30 English greetings and five font stacks as you open Home. The entire phrase shares one typeface.
+- Separate settings let you use a fixed Palatino font or a greeting based on the local clock.
 - Optional display name from settings, trimmed and limited to 80 characters.
 - Optional PNG/JPEG/WebP icon up to 256 KiB, decoded in the browser and structurally validated on the plugin server.
 - Removes the host's own empty section heading while enabled.

@@ -10,9 +10,21 @@ export default function plugin(bb: BbPluginApi) {
     displayName: {
       type: "string",
       label: "Greeting name",
-      description: "Shown after the greeting. Leave blank to show only the time of day.",
+      description: "Shown after the greeting. Leave blank for a greeting without a name.",
       default: "",
       experimental_schema: z.string().max(MAX_DISPLAY_NAME),
+    },
+    randomizeFont: {
+      type: "boolean",
+      label: "Randomize font",
+      description: "Pick a font each time you open Home. Turn off to use Palatino.",
+      default: true,
+    },
+    randomizeGreeting: {
+      type: "boolean",
+      label: "Randomize greeting",
+      description: "Pick a greeting each time you open Home. Turn off to use the time of day.",
+      default: true,
     },
   });
 
@@ -29,10 +41,12 @@ export default function plugin(bb: BbPluginApi) {
   };
 
   const appearance = async () => {
-    const raw = (await settings.get()).displayName;
+    const { displayName, randomizeFont, randomizeGreeting } = await settings.get();
     return appearanceSchema.parse({
-      displayName: typeof raw === "string" ? raw.trim().slice(0, MAX_DISPLAY_NAME) : "",
+      displayName: typeof displayName === "string" ? displayName.trim().slice(0, MAX_DISPLAY_NAME) : "",
       iconDataUrl: readIcon(),
+      randomizeFont: randomizeFont !== false,
+      randomizeGreeting: randomizeGreeting !== false,
     });
   };
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { DEFAULT_GREETING_FONT, formatGreeting } from "../greeting.ts";
 import { HERO_ID } from "../hero.mjs";
 import { mountHomeHero } from "../hero-mount.mjs";
 
@@ -14,6 +15,7 @@ const COMPACT = `<div data-testid="root-compose-compact-home">
 const THREAD = `<div class="mx-auto max-w-[760px]" id="thread-column"><article>thread</article></div>`;
 
 const tick = (ms = 120) => new Promise(resolve => setTimeout(resolve, ms));
+const greeting = doc => doc.querySelector(".bb-hero-greeting");
 
 function setup(html, appearance = { displayName: "Alex", iconDataUrl: null }) {
   const dom = new JSDOM(`<body>${html}</body>`, { url: "http://localhost/" });
@@ -48,14 +50,15 @@ test("mounts when a home target arrives after starting on a thread", async () =>
   const hero = doc.getElementById(HERO_ID);
   assert.ok(hero, "hero attaches once the home composer appears");
   assert.equal(hero.parentElement, doc.getElementById("home-column"));
-  assert.equal(doc.querySelector(".bb-hero-name").textContent, "Alex", "configured name renders");
+  assert.match(greeting(doc).textContent, /, Alex$/);
   cleanup();
 });
 
-test("re-attaches across home -> thread -> home without an appearance change", async () => {
+test("picks a new greeting and font across home -> thread -> home", async () => {
   const { doc, cleanup } = setup(HOME);
   await tick();
   assert.ok(doc.getElementById(HERO_ID));
+  const first = greeting(doc);
 
   swapBody(doc, THREAD);
   await tick();
@@ -64,7 +67,8 @@ test("re-attaches across home -> thread -> home without an appearance change", a
 
   swapBody(doc, HOME);
   await tick();
-  assert.ok(doc.getElementById(HERO_ID), "returning home restores the same appearance");
+  assert.notEqual(greeting(doc).textContent, first.textContent);
+  assert.notEqual(greeting(doc).style.fontFamily, first.style.fontFamily);
   cleanup();
 });
 
@@ -80,15 +84,60 @@ test("handles the compact home target", async () => {
 test("applies a changed appearance when the home target comes back", async () => {
   const { doc, state, cleanup } = setup(HOME);
   await tick();
-  assert.equal(doc.querySelector(".bb-hero-name").textContent, "Alex");
+  assert.match(greeting(doc).textContent, /, Alex$/);
 
   state.appearance = { displayName: "Blair", iconDataUrl: null };
   swapBody(doc, THREAD);
   await tick();
   swapBody(doc, HOME);
   await tick();
-  assert.equal(doc.querySelector(".bb-hero-name").textContent, "Blair");
+  assert.match(greeting(doc).textContent, /, Blair$/);
   cleanup();
+});
+
+test("each switch applies independently and preserves the other choice", async () => {
+  const { doc, state, cleanup } = setup(HOME);
+  try {
+    Object.defineProperty(doc, "visibilityState", { value: "visible" });
+    const refresh = async changes => {
+      Object.assign(state.appearance, changes);
+      doc.dispatchEvent(new doc.defaultView.Event("visibilitychange"));
+      await tick();
+    };
+    await tick();
+    const initial = greeting(doc);
+    await refresh({});
+    assert.equal(greeting(doc), initial, "refreshing the same appearance leaves the greeting mounted");
+
+    await refresh({ randomizeFont: false });
+    const probe = doc.createElement("div");
+    probe.style.fontFamily = DEFAULT_GREETING_FONT;
+    assert.equal(greeting(doc).style.fontFamily, probe.style.fontFamily);
+    assert.equal(greeting(doc).textContent, initial.textContent);
+
+    await refresh({ randomizeFont: true, randomizeGreeting: false });
+    assert.equal(greeting(doc).style.fontFamily, initial.style.fontFamily);
+    assert.equal(greeting(doc).textContent, formatGreeting(new Date().getHours(), "Alex"));
+  } finally {
+    cleanup();
+  }
+});
+
+test("waits for stored choices before showing a greeting", async () => {
+  const { window: { document: doc } } = new JSDOM(`<body>${HOME}</body>`, { url: "http://localhost/" });
+  const { promise, resolve } = Promise.withResolvers();
+  const cleanup = mountHomeHero({ document: doc, getAppearance: () => promise });
+  try {
+    doc.body.append(doc.createElement("aside"));
+    await tick();
+    assert.equal(greeting(doc), null);
+
+    resolve({ displayName: "Alex", randomizeGreeting: false, randomizeFont: false });
+    await tick();
+    assert.equal(greeting(doc).textContent, formatGreeting(new Date().getHours(), "Alex"));
+  } finally {
+    cleanup();
+  }
 });
 
 test("cleanup disconnects the observer and the poll timer", async () => {
